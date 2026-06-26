@@ -50,3 +50,21 @@ def generate_ticket_number(prefix="L"):
         next_number = last_sequence + 1
 
     return f"{prefix}-{date_part}-{next_number:04d}"
+
+def calculate_parking_total(minutes, first_hour_price, block_price, block_minutes):
+    minutes = int(minutes)
+    first_hour_price = Decimal(first_hour_price)
+    block_price = Decimal(block_price)
+    block_minutes = int(block_minutes)
+
+    if minutes <= 60:
+        return money(first_hour_price)
+
+    extra_minutes = minutes - 60
+
+    # Bloques iniciados después de la primera hora
+    extra_blocks = (extra_minutes // block_minutes) + 1
+
+    total = first_hour_price + (Decimal(extra_blocks) * block_price)
+
+    return money(total)
