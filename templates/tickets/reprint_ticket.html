@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}Reimprimir ticket | Anracar{% endblock %}
+
+{% block content %}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h1 class="h3 fw-bold mb-1">Reimprimir ticket</h1>
+                <p class="text-muted mb-0">
+                    Esta acción requiere autorización OTP y quedará registrada en auditoría.
+                </p>
+            </div>
+
+            {% if ticket.ticket_type == "wash" %}
+                <a href="{% url 'tickets:wash_ticket_detail' ticket.id %}" class="btn btn-outline-secondary">
+                    Volver
+                </a>
+            {% elif ticket.ticket_type == "parking" %}
+                <a href="{% url 'tickets:parking_ticket_detail' ticket.id %}" class="btn btn-outline-secondary">
+                    Volver
+                </a>
+            {% endif %}
+        </div>
+
+        <div class="alert alert-warning">
+            Este ticket ya fue impreso {{ ticket.print_count }} vez/veces.
+            Para reimprimirlo se requiere OTP y motivo.
+        </div>
+
+        <div class="card shadow-sm border-0 mb-3">
+            <div class="card-header bg-dark text-white">
+                Resumen del ticket
+            </div>
+
+            <div class="card-body">
+                <p class="mb-1">
+                    <strong>Ticket:</strong> {{ ticket.ticket_number }}
+                </p>
+
+                <p class="mb-1">
+                    <strong>Tipo:</strong> {{ ticket.get_ticket_type_display }}
+                </p>
+
+                <p class="mb-1">
+                    <strong>Estado:</strong> {{ ticket.get_status_display }}
+                </p>
+
+                <p class="mb-1">
+                    <strong>Placa:</strong> {{ ticket.vehicle_plate }}
+                </p>
+
+                <p class="mb-1">
+                    <strong>Total:</strong> ₡{{ ticket.total_with_tax }}
+                </p>
+
+                {% if ticket.last_printed_at %}
+                    <p class="mb-1">
+                        <strong>Última impresión:</strong>
+                        {{ ticket.last_printed_at|date:"d/m/Y H:i" }}
+                    </p>
+                {% endif %}
+            </div>
+        </div>
+
+        <form method="post" class="card shadow-sm border-0">
+            {% csrf_token %}
+
+            <div class="card-body">
+                <h5 class="card-title mb-3">Autorización OTP</h5>
+
+                <div class="mb-3">
+                    <label class="form-label">{{ form.authorized_by_employee.label }}</label>
+                    {{ form.authorized_by_employee }}
+                    {{ form.authorized_by_employee.errors }}
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">{{ form.otp_code.label }}</label>
+                    {{ form.otp_code }}
+                    {{ form.otp_code.errors }}
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">{{ form.reason.label }}</label>
+                    {{ form.reason }}
+                    <div class="form-text">
+                        Ejemplo: el ticket se dañó, cliente lo perdió, error de impresión, etc.
+                    </div>
+                    {{ form.reason.errors }}
+                </div>
+            </div>
+
+            <div class="card-footer bg-white d-flex justify-content-end gap-2">
+                {% if ticket.ticket_type == "wash" %}
+                    <a href="{% url 'tickets:wash_ticket_detail' ticket.id %}" class="btn btn-outline-secondary">
+                        Cancelar
+                    </a>
+                {% elif ticket.ticket_type == "parking" %}
+                    <a href="{% url 'tickets:parking_ticket_detail' ticket.id %}" class="btn btn-outline-secondary">
+                        Cancelar
+                    </a>
+                {% endif %}
+
+                <button type="submit" class="btn btn-warning">
+                    Autorizar reimpresión
+                </button>
+            </div>
+        </form>
+
+    </div>
+</div>
+
+{% endblock %}

@@ -19,6 +19,7 @@ from tickets.forms import (
     ChargeWithoutCodeForm,
     ParkingTicketForm,
     WashTicketForm,
+    ReprintTicketForm,
 )
 from tickets.models import Customer, Ticket, TicketExtra
 from tickets.utils import (
@@ -96,6 +97,7 @@ def create_wash_ticket(request):
                 total_with_tax=tax_data["total_with_tax"],
 
                 closing_code_hash=make_password(closing_code),
+                closing_code_for_print=closing_code,
 
                 created_by_employee=request.user,
             )
@@ -231,6 +233,7 @@ def create_parking_ticket(request):
                 total_with_tax=first_hour_price,
 
                 closing_code_hash=make_password(closing_code),
+                closing_code_for_print=closing_code,
 
                 parking_entry_at=timezone.now(),
                 parking_first_hour_price_snapshot=first_hour_price,
@@ -1202,6 +1205,201 @@ def cancel_ticket(request, ticket_id):
     return render(
         request,
         "tickets/cancel_ticket.html",
+        {
+            "ticket": ticket,
+            "form": form,
+        },
+    )
+
+@login_required
+@transaction.atomic
+def print_ticket(request, ticket_id):
+    ticket = get_object_or_404(
+        Ticket.objects.select_related(
+            "customer",
+            "service",
+            "cash_day",
+            "created_by_employee",
+            "last_printed_by_employee",
+        ).prefetch_related("ticket_extras"),
+        id=ticket_id,
+    )
+
+    old_values = {
+        "print_count": ticket.print_count,
+        "last_printed_at": str(ticket.last_printed_at),
+        "last_printed_by_employee": (
+            ticket.last_printed_by_employee.username
+            if ticket.last_printed_by_employee
+            else None
+        ),
+    }
+
+    ticket.print_count += 1
+    ticket.last_printed_at = timezone.now()
+    ticket.last_printed_by_employee = request.user
+    ticket.updated_by_employee = request.user
+
+    ticket.save(
+        update_fields=[
+            "print_count",
+            "last_printed_at",
+            "last_printed_by_employee",
+            "updated_by_employee",
+            "updated_at",
+        ]
+    )
+
+    AuditLog.objects.create(
+        employee=request.user,
+        ticket=ticket,
+        action_type=AuditLog.REPRINT_TICKET if ticket.print_count > 1 else AuditLog.REPRINT_TICKET,
+        entity_type="Ticket",
+        entity_id=ticket.id,
+        old_values=old_values,
+        new_values={
+            "print_count": ticket.print_count,
+            "last_printed_at": str(ticket.last_printed_at),
+            "last_printed_by_employee": request.user.username,
+            "print_type": "first_print" if ticket.print_count == 1 else "reprint",
+        },
+        reason="Primera impresión" if ticket.print_count == 1 else "Reimpresión autorizada",
+    )
+
+    return render(
+        request,
+        "tickets/print_ticket.html",
+        {
+            "ticket": ticket,
+        },
+    )
+
+@login_required
+@transaction.atomic
+def reprint_ticket(request, ticket_id):
+    ticket = get_object_or_404(
+        Ticket.objects.select_related(
+            "customer",
+            "service",
+            "cash_day",
+            "created_by_employee",
+        ).prefetch_related("ticket_extras"),
+        id=ticket_id,
+    )
+
+    if ticket.print_count == 0:
+        return redirect("tickets:print_ticket", ticket_id=ticket.id)
+
+    if request.method == "POST":
+        form = ReprintTicketForm(request.POST)
+
+        if form.is_valid():
+            authorized_by_employee = form.cleaned_data["authorized_by_employee"]
+            otp_code = form.cleaned_data["otp_code"]
+            reason = form.cleaned_data["reason"]
+
+            is_valid_otp, otp_usage = validate_otp_authorization(
+                used_by_employee=request.user,
+                authorized_by_employee=authorized_by_employee,
+                ticket=ticket,
+                action_type=OtpUsage.REPRINT_TICKET,
+                otp_code=otp_code,
+                reason=reason,
+            )
+
+            if not is_valid_otp:
+                messages.error(
+                    request,
+                    "El OTP ingresado no es correcto.",
+                )
+
+                AuditLog.objects.create(
+                    employee=request.user,
+                    ticket=ticket,
+                    otp_usage=otp_usage,
+                    action_type=AuditLog.REPRINT_TICKET,
+                    entity_type="Ticket",
+                    entity_id=ticket.id,
+                    old_values={
+                        "print_count": ticket.print_count,
+                    },
+                    new_values={
+                        "attempt": "invalid_otp_for_reprint",
+                        "authorized_by_employee": authorized_by_employee.username,
+                    },
+                    reason=reason,
+                )
+
+                return render(
+                    request,
+                    "tickets/reprint_ticket.html",
+                    {
+                        "ticket": ticket,
+                        "form": form,
+                    },
+                )
+
+            old_values = {
+                "print_count": ticket.print_count,
+                "last_printed_at": str(ticket.last_printed_at),
+                "last_printed_by_employee": (
+                    ticket.last_printed_by_employee.username
+                    if ticket.last_printed_by_employee
+                    else None
+                ),
+            }
+
+            ticket.print_count += 1
+            ticket.last_printed_at = timezone.now()
+            ticket.last_printed_by_employee = request.user
+            ticket.updated_by_employee = request.user
+
+            ticket.save(
+                update_fields=[
+                    "print_count",
+                    "last_printed_at",
+                    "last_printed_by_employee",
+                    "updated_by_employee",
+                    "updated_at",
+                ]
+            )
+
+            AuditLog.objects.create(
+                employee=request.user,
+                ticket=ticket,
+                otp_usage=otp_usage,
+                action_type=AuditLog.REPRINT_TICKET,
+                entity_type="Ticket",
+                entity_id=ticket.id,
+                old_values=old_values,
+                new_values={
+                    "print_count": ticket.print_count,
+                    "last_printed_at": str(ticket.last_printed_at),
+                    "last_printed_by_employee": request.user.username,
+                    "authorized_by_employee": authorized_by_employee.username,
+                },
+                reason=reason,
+            )
+
+            messages.success(
+                request,
+                f"Reimpresión del ticket {ticket.ticket_number} autorizada.",
+            )
+
+            return render(
+                request,
+                "tickets/print_ticket.html",
+                {
+                    "ticket": ticket,
+                },
+            )
+
+    else:
+        form = ReprintTicketForm()
+
+    return render(
+        request,
+        "tickets/reprint_ticket.html",
         {
             "ticket": ticket,
             "form": form,

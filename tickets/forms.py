@@ -203,3 +203,6 @@ class ChargeWithoutCodeForm(OtpAuthorizationForm):
 
 class CancelTicketForm(OtpAuthorizationForm):
     pass
+
+class ReprintTicketForm(OtpAuthorizationForm):
+    pass

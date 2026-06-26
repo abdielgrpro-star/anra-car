@@ -120,6 +120,11 @@ class Ticket(models.Model):
 # here we save the hash code that will be necessary to close the ticket
     closing_code_hash = models.TextField()
 
+    closing_code_for_print = models.CharField(
+    max_length=20,
+    blank=True,
+)
+
     parking_entry_at = models.DateTimeField(null=True, blank=True)
     parking_exit_at = models.DateTimeField(null=True, blank=True)
     parking_minutes = models.PositiveIntegerField(null=True, blank=True)
@@ -164,6 +169,21 @@ class Ticket(models.Model):
 
     paid_at = models.DateTimeField(null=True, blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
+
+    print_count = models.PositiveIntegerField(default=0)
+
+    last_printed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    last_printed_by_employee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="last_printed_tickets",
+    )
 
     class Meta:
         ordering = ["-created_at"]

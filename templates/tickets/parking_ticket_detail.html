@@ -14,14 +14,15 @@
 
             <div class="d-flex gap-2">
                 {% if ticket.status == "active" %}
-                <a href="{% url 'tickets:charge_parking_ticket' ticket.id %}" class="btn btn-success">
-                    Cobrar
+                <a href="{% url 'tickets:reprint_ticket' ticket.id %}" class="btn btn-primary">
+                    {% if ticket.print_count == 0 %}
+                    Imprimir ticket
+                    {% else %}
+                    Reimprimir ticket
+                    {% endif %}
                 </a>
                 {% endif %}
 
-                <button onclick="window.print()" class="btn btn-primary">
-                    Imprimir ticket
-                </button>
             </div>
         </div>
 
@@ -91,6 +92,38 @@
                     por cada bloque iniciado de
                     <strong>{{ ticket.parking_block_minutes_snapshot }} minutos</strong>.
                 </p>
+
+                <hr>
+
+                {% if ticket.parking_exit_at %}
+                <p class="mb-1">
+                    <strong>Salida:</strong> {{ ticket.parking_exit_at|date:"d/m/Y H:i" }}
+                </p>
+
+                <p class="mb-1">
+                    <strong>Tiempo total:</strong> {{ ticket.parking_minutes }} minutos
+                </p>
+                {% endif %}
+
+                <div class="d-flex justify-content-between">
+                    <span>Subtotal sin IVA</span>
+                    <span>₡{{ ticket.subtotal_without_tax }}</span>
+                </div>
+
+                <div class="d-flex justify-content-between">
+                    <span>IVA</span>
+                    <span>₡{{ ticket.tax_amount }}</span>
+                </div>
+
+                <div class="d-flex justify-content-between fs-4 fw-bold mt-2">
+                    {% if ticket.parking_exit_at %}
+                    <span>Total</span>
+                    {% else %}
+                    <span>Monto mínimo</span>
+                    {% endif %}
+
+                    <span>₡{{ ticket.total_with_tax }}</span>
+                </div>
 
                 <hr>
 

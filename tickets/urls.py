@@ -7,6 +7,8 @@ app_name = "tickets"
 urlpatterns = [
     path("all/", views.all_tickets, name="all_tickets"),
     path("<int:ticket_id>/cancel/", views.cancel_ticket, name="cancel_ticket"),
+    path("<int:ticket_id>/print/", views.print_ticket, name="print_ticket"),
+    path("<int:ticket_id>/reprint/", views.reprint_ticket, name="reprint_ticket"),
 
     path("wash/create/", views.create_wash_ticket, name="create_wash_ticket"),
     path("wash/pending/", views.pending_wash_tickets, name="pending_wash_tickets"),
