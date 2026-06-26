@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+
+{% block title %}Auditoría | Anracar{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="h3 fw-bold mb-1">Auditoría</h1>
+        <p class="text-muted mb-0">
+            Consulta de acciones, OTP, motivos y cambios realizados.
+        </p>
+    </div>
+</div>
+
+<form method="get" class="card shadow-sm border-0 mb-4">
+    <div class="card-body">
+        <div class="row g-3">
+
+            <div class="col-md-3">
+                <label class="form-label">Desde</label>
+                <input
+                    type="date"
+                    name="date_from"
+                    value="{{ date_from }}"
+                    class="form-control"
+                >
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label">Hasta</label>
+                <input
+                    type="date"
+                    name="date_to"
+                    value="{{ date_to }}"
+                    class="form-control"
+                >
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label">Empleado</label>
+                <select name="employee" class="form-select">
+                    <option value="">Todos</option>
+
+                    {% for employee in employees %}
+                        <option
+                            value="{{ employee.id }}"
+                            {% if employee_id == employee.id|stringformat:"s" %}selected{% endif %}
+                        >
+                            {{ employee.username }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label">Acción</label>
+                <select name="action_type" class="form-select">
+                    <option value="">Todas</option>
+
+                    {% for value, label in action_choices %}
+                        <option
+                            value="{{ value }}"
+                            {% if action_type == value %}selected{% endif %}
+                        >
+                            {{ label }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label">OTP</label>
+                <select name="otp_status" class="form-select">
+                    <option value="" {% if otp_status == "" %}selected{% endif %}>
+                        Todos
+                    </option>
+
+                    <option value="used" {% if otp_status == "used" %}selected{% endif %}>
+                        Usó OTP
+                    </option>
+
+                    <option value="not_used" {% if otp_status == "not_used" %}selected{% endif %}>
+                        No usó OTP
+                    </option>
+
+                    <option value="valid" {% if otp_status == "valid" %}selected{% endif %}>
+                        OTP válido
+                    </option>
+
+                    <option value="invalid" {% if otp_status == "invalid" %}selected{% endif %}>
+                        OTP inválido
+                    </option>
+                </select>
+            </div>
+
+            <div class="col-md-6">
+                <label class="form-label">Buscar</label>
+                <input
+                    type="text"
+                    name="search"
+                    value="{{ search }}"
+                    class="form-control"
+                    placeholder="Ticket, placa, motivo, empleado, admin autorizador..."
+                >
+            </div>
+
+            <div class="col-md-3 d-flex align-items-end gap-2">
+                <button type="submit" class="btn btn-primary w-100">
+                    Filtrar
+                </button>
+
+                <a href="{% url 'audit:audit_log_list' %}" class="btn btn-outline-secondary">
+                    Limpiar
+                </a>
+            </div>
+
+        </div>
+    </div>
+</form>
+
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-bold">Registros</h5>
+        <span class="badge text-bg-secondary">
+            Máximo 300 resultados
+        </span>
+    </div>
+
+    <div class="card-body">
+        {% if logs %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Empleado</th>
+                            <th>Acción</th>
+                            <th>Ticket</th>
+                            <th>OTP</th>
+                            <th>Admin autorizador</th>
+                            <th>Motivo</th>
+                            <th>Cambios</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {% for log in logs %}
+                            <tr>
+                                <td style="white-space: nowrap;">
+                                    {{ log.created_at|date:"d/m/Y H:i" }}
+                                </td>
+
+                                <td>
+                                    <div class="fw-semibold">
+                                        {{ log.employee.username }}
+                                    </div>
+
+                                    {% if log.employee.full_name %}
+                                        <small class="text-muted">
+                                            {{ log.employee.full_name }}
+                                        </small>
+                                    {% endif %}
+                                </td>
+
+                                <td>
+                                    <span class="badge text-bg-dark">
+                                        {{ log.get_action_type_display }}
+                                    </span>
+                                </td>
+
+                                <td>
+                                    {% if log.ticket %}
+                                        {% if log.ticket.ticket_type == "wash" %}
+                                            <a href="{% url 'tickets:wash_ticket_detail' log.ticket.id %}">
+                                                {{ log.ticket.ticket_number }}
+                                            </a>
+                                        {% else %}
+                                            <a href="{% url 'tickets:parking_ticket_detail' log.ticket.id %}">
+                                                {{ log.ticket.ticket_number }}
+                                            </a>
+                                        {% endif %}
+
+                                        <div>
+                                            <small class="text-muted">
+                                                {{ log.ticket.vehicle_plate }}
+                                            </small>
+                                        </div>
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+
+                                <td>
+                                    {% if log.otp_usage %}
+                                        {% if log.otp_usage.was_valid %}
+                                            <span class="badge text-bg-success">
+                                                Válido
+                                            </span>
+                                        {% else %}
+                                            <span class="badge text-bg-danger">
+                                                Inválido
+                                            </span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="badge text-bg-secondary">
+                                            No usado
+                                        </span>
+                                    {% endif %}
+                                </td>
+
+                                <td>
+                                    {% if log.otp_usage and log.otp_usage.authorized_by_employee %}
+                                        <div class="fw-semibold">
+                                            {{ log.otp_usage.authorized_by_employee.username }}
+                                        </div>
+
+                                        {% if log.otp_usage.authorized_by_employee.full_name %}
+                                            <small class="text-muted">
+                                                {{ log.otp_usage.authorized_by_employee.full_name }}
+                                            </small>
+                                        {% endif %}
+                                    {% elif log.new_values.authorized_by_employee %}
+                                        {{ log.new_values.authorized_by_employee }}
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+
+                                <td style="min-width: 250px;">
+                                    {% if log.reason %}
+                                        {{ log.reason }}
+                                    {% elif log.otp_usage and log.otp_usage.reason %}
+                                        {{ log.otp_usage.reason }}
+                                    {% else %}
+                                        <span class="text-muted">Sin motivo</span>
+                                    {% endif %}
+                                </td>
+
+                                <td>
+                                    <button
+                                        class="btn btn-sm btn-outline-secondary"
+                                        type="button"
+                                        data-bs-toggle="collapse"
+                                        data-bs-target="#log-{{ log.id }}"
+                                        aria-expanded="false"
+                                    >
+                                        Ver
+                                    </button>
+                                </td>
+                            </tr>
+
+                            <tr class="collapse" id="log-{{ log.id }}">
+                                <td colspan="8">
+                                    <div class="row g-3">
+                                        <div class="col-md-6">
+                                            <h6 class="fw-bold">Antes</h6>
+                                            <pre class="bg-light border rounded p-2 small mb-0">{{ log.old_values|default:"{}" }}</pre>
+                                        </div>
+
+                                        <div class="col-md-6">
+                                            <h6 class="fw-bold">Después</h6>
+                                            <pre class="bg-light border rounded p-2 small mb-0">{{ log.new_values|default:"{}" }}</pre>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="text-muted mb-0">
+                No hay registros de auditoría con esos filtros.
+            </p>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}

@@ -17,6 +17,8 @@ class RoleAdmin(admin.ModelAdmin):
 class EmployeeAdmin(UserAdmin):
     actions = [
         "generate_new_otp",
+        "activate_employees",
+        "deactivate_employees",
     ]
 
     list_display = [
@@ -45,6 +47,19 @@ class EmployeeAdmin(UserAdmin):
         ),
     )
 
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def activate_employees(self, request, queryset):
+        queryset.update(is_active=True)
+
+    activate_employees.short_description = "Activar empleados seleccionados"
+
+    def deactivate_employees(self, request, queryset):
+        queryset.update(is_active=False)
+
+    deactivate_employees.short_description = "Desactivar empleados seleccionados"
+
     readonly_fields = [
         "otp_current_code",
         "otp_generated_at",
@@ -66,3 +81,5 @@ class EmployeeAdmin(UserAdmin):
         )
 
     generate_new_otp.short_description = "Generar nuevo OTP y enviar por correo"
+
+    

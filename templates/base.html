@@ -64,9 +64,13 @@
                             Caja del día
                         </a>
                     </li>
-                    {% endif %}
 
-                    {% if request.user.is_admin_user or request.user.is_technical_admin or request.user.is_superuser %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'audit:audit_log_list' %}">
+                            Auditoría
+                        </a>
+                    </li>
+
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'admin:index' %}">
                             Panel admin

@@ -1,6 +1,7 @@
 from django import forms
-from audit.forms import OtpAuthorizationForm
+from audit.forms import OtpAuthorizationForm, OtpAuthorizationForm
 from catalog.models import Extra, Service
+from decimal import Decimal
 
 
 class WashTicketForm(forms.Form):
@@ -311,3 +312,26 @@ class CancelTicketForm(OtpAuthorizationForm):
 
 class ReprintTicketForm(OtpAuthorizationForm):
     pass
+
+
+class ApplyDiscountForm(OtpAuthorizationForm):
+    discount_amount = forms.DecimalField(
+        label="Monto de descuento",
+        max_digits=12,
+        decimal_places=2,
+        min_value=Decimal("0.00"),
+        required=True,
+        widget=forms.NumberInput(attrs={
+            "class": "form-control",
+            "step": "0.01",
+            "placeholder": "Ejemplo: 1000",
+        }),
+    )
+
+    def __init__(self, *args, **kwargs):
+        ticket = kwargs.pop("ticket", None)
+
+        super().__init__(*args, **kwargs)
+
+        if ticket and not self.is_bound:
+            self.fields["discount_amount"].initial = ticket.discount_amount

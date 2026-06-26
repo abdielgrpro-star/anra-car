@@ -18,6 +18,11 @@
                     Editar
                 </a>
 
+                <a href="{% url 'tickets:apply_discount' ticket.id %}" class="btn btn-warning">
+                    Aplicar descuento
+                </a>
+
+
                 <a href="{% url 'tickets:charge_wash_ticket' ticket.id %}" class="btn btn-success">
                     Cobrar
                 </a>
@@ -129,6 +134,12 @@
                         <span>Descuento</span>
                         <span>₡{{ ticket.discount_amount }}</span>
                     </div>
+
+                    {% if ticket.discount_amount > 0 %}
+                    <p class="mb-1">
+                        <strong>Descuento:</strong> ₡{{ ticket.discount_amount }}
+                    </p>
+                    {% endif %}
 
                     <div class="d-flex justify-content-between fs-4 fw-bold mt-2">
                         <span>Total</span>

@@ -18,6 +18,12 @@
                     Editar
                 </a>
 
+
+                <a href="{% url 'tickets:apply_discount' ticket.id %}" class="btn btn-warning">
+                    Aplicar descuento
+                </a>
+
+
                 <a href="{% url 'tickets:charge_parking_ticket' ticket.id %}" class="btn btn-success">
                     Cobrar
                 </a>
@@ -121,6 +127,13 @@
                     <span>IVA</span>
                     <span>₡{{ ticket.tax_amount }}</span>
                 </div>
+
+                {% if ticket.discount_amount > 0 %}
+                <div class="d-flex justify-content-between">
+                    <span>Descuento:</span>
+                    <span> ₡{{ ticket.discount_amount }}</span>
+                </div>
+                {% endif %}
 
                 <div class="d-flex justify-content-between fs-4 fw-bold mt-2">
                     {% if ticket.parking_exit_at %}

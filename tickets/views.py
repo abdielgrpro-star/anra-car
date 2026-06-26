@@ -14,6 +14,7 @@ from cash.services import get_or_create_today_cash_day_for_operation
 from catalog.models import Service
 from payments.models import Payment
 from tickets.forms import (
+    ApplyDiscountForm,
     CancelTicketForm,
     ChargeParkingTicketForm,
     ChargeWashTicketForm,
@@ -357,12 +358,17 @@ def charge_parking_ticket(request, ticket_id):
     if parking_minutes < 1:
         parking_minutes = 1
 
-    parking_total = calculate_parking_total(
+    parking_total_before_discount = calculate_parking_total(
         minutes=parking_minutes,
         first_hour_price=ticket.parking_first_hour_price_snapshot,
         block_price=ticket.parking_block_price_snapshot,
         block_minutes=ticket.parking_block_minutes_snapshot,
     )
+
+    parking_total = parking_total_before_discount - ticket.discount_amount
+
+    if parking_total < Decimal("0.00"):
+        parking_total = Decimal("0.00")
 
     tax_data = calculate_tax_from_total(
         total_with_tax=parking_total,
@@ -931,12 +937,17 @@ def charge_parking_without_code(request, ticket_id):
     if parking_minutes < 1:
         parking_minutes = 1
 
-    parking_total = calculate_parking_total(
+    parking_total_before_discount = calculate_parking_total(
         minutes=parking_minutes,
         first_hour_price=ticket.parking_first_hour_price_snapshot,
         block_price=ticket.parking_block_price_snapshot,
         block_minutes=ticket.parking_block_minutes_snapshot,
     )
+
+    parking_total = parking_total_before_discount - ticket.discount_amount
+
+    if parking_total < Decimal("0.00"):
+        parking_total = Decimal("0.00")
 
     tax_data = calculate_tax_from_total(
         total_with_tax=parking_total,
@@ -1896,6 +1907,220 @@ def edit_parking_ticket(request, ticket_id):
     return render(
         request,
         "tickets/edit_parking_ticket.html",
+        {
+            "ticket": ticket,
+            "form": form,
+        },
+    )
+
+@login_required
+@transaction.atomic
+def apply_discount(request, ticket_id):
+    ticket = get_object_or_404(
+        Ticket.objects.select_related(
+            "customer",
+            "service",
+            "cash_day",
+            "created_by_employee",
+        ).prefetch_related("ticket_extras"),
+        id=ticket_id,
+    )
+
+    if ticket.status not in [Ticket.PENDING_PAYMENT, Ticket.ACTIVE]:
+        messages.error(
+            request,
+            "Solo se pueden aplicar descuentos a tickets pendientes o parqueos activos.",
+        )
+
+        if ticket.ticket_type == Ticket.WASH:
+            return redirect("tickets:wash_ticket_detail", ticket_id=ticket.id)
+
+        return redirect("tickets:parking_ticket_detail", ticket_id=ticket.id)
+
+    if request.method == "POST":
+        form = ApplyDiscountForm(
+            request.POST,
+            ticket=ticket,
+            request_user=request.user,
+        )
+
+        if form.is_valid():
+            reason = form.cleaned_data["reason"]
+
+            authorized_by_employee = form.cleaned_data.get(
+                "authorized_by_employee"
+            )
+            otp_code = form.cleaned_data.get("otp_code")
+
+            discount_amount = form.cleaned_data["discount_amount"]
+
+            is_authorized, otp_usage, final_authorizer = validate_sensitive_action_authorization(
+                used_by_employee=request.user,
+                authorized_by_employee=authorized_by_employee,
+                ticket=ticket,
+                action_type=OtpUsage.APPLY_DISCOUNT,
+                otp_code=otp_code,
+                reason=reason,
+            )
+
+            if not is_authorized:
+                messages.error(
+                    request,
+                    "El OTP ingresado no es correcto.",
+                )
+
+                AuditLog.objects.create(
+                    employee=request.user,
+                    ticket=ticket,
+                    otp_usage=otp_usage,
+                    action_type=AuditLog.APPLY_DISCOUNT,
+                    entity_type="Ticket",
+                    entity_id=ticket.id,
+                    old_values={
+                        "discount_amount": str(ticket.discount_amount),
+                        "total_with_tax": str(ticket.total_with_tax),
+                    },
+                    new_values={
+                        "attempt": "invalid_authorization_for_apply_discount",
+                        "authorized_by_employee": (
+                            authorized_by_employee.username
+                            if authorized_by_employee
+                            else None
+                        ),
+                    },
+                    reason=reason,
+                )
+
+                return render(
+                    request,
+                    "tickets/apply_discount.html",
+                    {
+                        "ticket": ticket,
+                        "form": form,
+                    },
+                )
+
+            old_values = {
+                "discount_amount": str(ticket.discount_amount),
+                "subtotal_without_tax": str(ticket.subtotal_without_tax),
+                "tax_amount": str(ticket.tax_amount),
+                "total_with_tax": str(ticket.total_with_tax),
+            }
+
+            if ticket.ticket_type == Ticket.WASH:
+                gross_total = ticket.service_price_with_tax_snapshot
+
+                for ticket_extra in ticket.ticket_extras.all():
+                    gross_total += ticket_extra.extra_price_with_tax_snapshot
+
+                if discount_amount > gross_total:
+                    form.add_error(
+                        "discount_amount",
+                        "El descuento no puede ser mayor al total del ticket.",
+                    )
+
+                    return render(
+                        request,
+                        "tickets/apply_discount.html",
+                        {
+                            "ticket": ticket,
+                            "form": form,
+                        },
+                    )
+
+                new_total = gross_total - discount_amount
+
+                tax_data = calculate_tax_from_total(
+                    total_with_tax=new_total,
+                    tax_rate=ticket.tax_rate,
+                )
+
+                ticket.discount_amount = discount_amount
+                ticket.subtotal_without_tax = tax_data["subtotal_without_tax"]
+                ticket.tax_amount = tax_data["tax_amount"]
+                ticket.total_with_tax = tax_data["total_with_tax"]
+                ticket.updated_by_employee = request.user
+
+                ticket.save(
+                    update_fields=[
+                        "discount_amount",
+                        "subtotal_without_tax",
+                        "tax_amount",
+                        "total_with_tax",
+                        "updated_by_employee",
+                        "updated_at",
+                    ]
+                )
+
+            else:
+                if discount_amount > ticket.total_with_tax:
+                    form.add_error(
+                        "discount_amount",
+                        "El descuento no puede ser mayor al monto actual del parqueo.",
+                    )
+
+                    return render(
+                        request,
+                        "tickets/apply_discount.html",
+                        {
+                            "ticket": ticket,
+                            "form": form,
+                        },
+                    )
+
+                ticket.discount_amount = discount_amount
+                ticket.updated_by_employee = request.user
+
+                ticket.save(
+                    update_fields=[
+                        "discount_amount",
+                        "updated_by_employee",
+                        "updated_at",
+                    ]
+                )
+
+            AuditLog.objects.create(
+                employee=request.user,
+                ticket=ticket,
+                otp_usage=otp_usage,
+                action_type=AuditLog.APPLY_DISCOUNT,
+                entity_type="Ticket",
+                entity_id=ticket.id,
+                old_values=old_values,
+                new_values={
+                    "discount_amount": str(ticket.discount_amount),
+                    "subtotal_without_tax": str(ticket.subtotal_without_tax),
+                    "tax_amount": str(ticket.tax_amount),
+                    "total_with_tax": str(ticket.total_with_tax),
+                    "authorized_by_employee": (
+                        final_authorizer.username
+                        if final_authorizer
+                        else None
+                    ),
+                    "used_otp": otp_usage is not None,
+                },
+                reason=reason,
+            )
+
+            messages.success(
+                request,
+                f"Descuento aplicado correctamente al ticket {ticket.ticket_number}.",
+            )
+
+            if ticket.ticket_type == Ticket.WASH:
+                return redirect("tickets:wash_ticket_detail", ticket_id=ticket.id)
+
+            return redirect("tickets:parking_ticket_detail", ticket_id=ticket.id)
+
+    else:
+        form = ApplyDiscountForm(
+            ticket=ticket,
+            request_user=request.user,
+        )
+
+    return render(
+        request,
+        "tickets/apply_discount.html",
         {
             "ticket": ticket,
             "form": form,
