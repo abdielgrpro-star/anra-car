@@ -36,7 +36,9 @@
                 <p class="card-text text-muted">
                     Crear entrada de parqueo y cobrar por tiempo.
                 </p>
-                <a href="#" class="btn btn-primary w-100">Nuevo parqueo</a>
+                <a href="{% url 'tickets:create_parking_ticket' %}" class="btn btn-primary w-100">
+                    Nuevo parqueo
+                </a>
             </div>
         </div>
     </div>

@@ -101,3 +101,34 @@ class ChargeWashTicketForm(forms.Form):
             "placeholder": "Opcional",
         }),
     )
+
+class ParkingTicketForm(forms.Form):
+    customer_name = forms.CharField(
+        label="Nombre del cliente",
+        max_length=150,
+        required=False,
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+            "placeholder": "Ej: Juan Pérez",
+        }),
+    )
+
+    customer_phone = forms.CharField(
+        label="Teléfono",
+        max_length=30,
+        required=False,
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+            "placeholder": "Ej: 8888-8888",
+        }),
+    )
+
+    vehicle_plate = forms.CharField(
+        label="Placa",
+        max_length=30,
+        required=True,
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+            "placeholder": "Ej: ABC123",
+        }),
+    )
