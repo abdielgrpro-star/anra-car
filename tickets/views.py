@@ -691,3 +691,60 @@ def charge_wash_ticket(request, ticket_id):
             "form": form,
         },
     )
+
+
+@login_required
+def all_tickets(request):
+    tickets = (
+        Ticket.objects
+        .select_related(
+            "customer",
+            "service",
+            "cash_day",
+            "created_by_employee",
+            "updated_by_employee",
+        )
+        .order_by("-created_at")
+    )
+
+    search_query = request.GET.get("q", "").strip()
+    date_query = request.GET.get("date", "").strip()
+    ticket_type = request.GET.get("ticket_type", "").strip()
+    status = request.GET.get("status", "").strip()
+
+    if search_query:
+        tickets = tickets.filter(
+            models.Q(ticket_number__icontains=search_query)
+            | models.Q(vehicle_plate__icontains=search_query)
+            | models.Q(customer_name_snapshot__icontains=search_query)
+            | models.Q(customer_phone_snapshot__icontains=search_query)
+        )
+
+    if date_query:
+        tickets = tickets.filter(
+            cash_day__business_date=date_query
+        )
+
+    if ticket_type:
+        tickets = tickets.filter(
+            ticket_type=ticket_type
+        )
+
+    if status:
+        tickets = tickets.filter(
+            status=status
+        )
+
+    return render(
+        request,
+        "tickets/all_tickets.html",
+        {
+            "tickets": tickets,
+            "search_query": search_query,
+            "date_query": date_query,
+            "ticket_type": ticket_type,
+            "status": status,
+            "ticket_type_choices": Ticket.TICKET_TYPE_CHOICES,
+            "status_choices": Ticket.STATUS_CHOICES,
+        },
+    )

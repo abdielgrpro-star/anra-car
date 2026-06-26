@@ -15,7 +15,7 @@
 
 <div class="row g-3">
 
-    <div class="col-md-3">
+    <div class="col-md-4">
         <div class="card shadow-sm border-0 h-100">
             <div class="card-body">
                 <h5 class="card-title">Crear lavado</h5>
@@ -29,12 +29,12 @@
         </div>
     </div>
 
-    <div class="col-md-3">
+    <div class="col-md-4">
         <div class="card shadow-sm border-0 h-100">
             <div class="card-body">
-                <h5 class="card-title">Parqueo</h5>
+                <h5 class="card-title">Crear parqueo</h5>
                 <p class="card-text text-muted">
-                    Crear entrada de parqueo y cobrar por tiempo.
+                    Registrar entrada de parqueo con hora automática.
                 </p>
                 <a href="{% url 'tickets:create_parking_ticket' %}" class="btn btn-primary w-100">
                     Nuevo parqueo
@@ -43,19 +43,49 @@
         </div>
     </div>
 
-    <div class="col-md-3">
+    <div class="col-md-4">
         <div class="card shadow-sm border-0 h-100">
             <div class="card-body">
-                <h5 class="card-title">Tickets pendientes</h5>
+                <h5 class="card-title">Lavados pendientes</h5>
                 <p class="card-text text-muted">
-                    Buscar tickets pendientes de pago o parqueos activos.
+                    Ver lavados creados que aún no han sido pagados.
                 </p>
-                <a href="{% url 'tickets:pending_wash_tickets' %}" class="btn btn-outline-dark w-100">Ver tickets</a>
+                <a href="{% url 'tickets:pending_wash_tickets' %}" class="btn btn-outline-dark w-100">
+                    Ver lavados
+                </a>
             </div>
         </div>
     </div>
 
-    <div class="col-md-3">
+    <div class="col-md-4">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <h5 class="card-title">Parqueos activos</h5>
+                <p class="card-text text-muted">
+                    Ver vehículos actualmente dentro del parqueo.
+                </p>
+                <a href="{% url 'tickets:active_parking_tickets' %}" class="btn btn-outline-dark w-100">
+                    Ver parqueos
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <h5 class="card-title">Todos los tickets</h5>
+                <p class="card-text text-muted">
+                    Buscar tickets por fecha, tipo, estado, placa o cliente.
+                </p>
+                <a href="{% url 'tickets:all_tickets' %}" class="btn btn-outline-dark w-100">
+                    Buscar tickets
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
         <div class="card shadow-sm border-0 h-100">
             <div class="card-body">
                 <h5 class="card-title">Caja del día</h5>
