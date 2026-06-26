@@ -46,7 +46,7 @@
 
                     {% for value, label in status_choices %}
                     <option value="{{ value }}" {% if status == value %}selected{% endif %}>
-                        {{ label }}
+                        {{ label }} 
                     </option>
                     {% endfor %}
                 </select>
@@ -196,19 +196,18 @@
                                 Ver
                             </a>
 
-                            <a href="{% url 'tickets:reprint_ticket' ticket.id %}"
-                                class="btn btn-sm btn-outline-primary">
-                                {% if ticket.print_count == 0 %}
-                                Imprimir
-                                {% else %}
-                                Reimprimir
-                                {% endif %}
+                            {% if ticket.status == "active" %}
+                            <a href="{% url 'tickets:edit_parking_ticket' ticket.id %}" class="btn btn-sm btn-warning">
+                                Editar
                             </a>
 
-                            {% if ticket.status == "active" %}
                             <a href="{% url 'tickets:charge_parking_ticket' ticket.id %}"
                                 class="btn btn-sm btn-success">
                                 Cobrar
+                            </a>
+
+                            <a href="{% url 'tickets:cancel_ticket' ticket.id %}" class="btn btn-sm btn-outline-danger">
+                                Anular
                             </a>
                             {% endif %}
 

@@ -269,6 +269,43 @@ class EditWashTicketForm(OtpAuthorizationForm):
                 for ticket_extra in ticket.ticket_extras.all()
             ]
 
+class EditParkingTicketForm(OtpAuthorizationForm):
+    customer_name = forms.CharField(
+        label="Nombre del cliente",
+        max_length=150,
+        required=False,
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+        }),
+    )
+
+    customer_phone = forms.CharField(
+        label="Teléfono",
+        max_length=30,
+        required=False,
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+        }),
+    )
+
+    vehicle_plate = forms.CharField(
+        label="Placa",
+        max_length=30,
+        required=True,
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+        }),
+    )
+
+    def __init__(self, *args, **kwargs):
+        ticket = kwargs.pop("ticket", None)
+        super().__init__(*args, **kwargs)
+
+        if ticket and not self.is_bound:
+            self.fields["customer_name"].initial = ticket.customer_name_snapshot
+            self.fields["customer_phone"].initial = ticket.customer_phone_snapshot
+            self.fields["vehicle_plate"].initial = ticket.vehicle_plate
+
 class CancelTicketForm(OtpAuthorizationForm):
     pass
 

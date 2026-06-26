@@ -86,6 +86,9 @@
                         </td>
 
                         <td class="text-end">
+                            <a href="{% url 'tickets:edit_parking_ticket' ticket.id %}" class="btn btn-sm btn-warning">
+                                Editar
+                            </a>
                             <a href="{% url 'tickets:parking_ticket_detail' ticket.id %}"
                                 class="btn btn-sm btn-outline-secondary">
                                 Ver

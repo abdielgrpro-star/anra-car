@@ -17,6 +17,7 @@ from tickets.forms import (
     ChargeParkingTicketForm,
     ChargeWashTicketForm,
     ChargeWithoutCodeForm,
+    EditParkingTicketForm,
     EditWashTicketForm,
     ParkingTicketForm,
     ReprintTicketForm,
@@ -1633,6 +1634,154 @@ def edit_wash_ticket(request, ticket_id):
     return render(
         request,
         "tickets/edit_wash_ticket.html",
+        {
+            "ticket": ticket,
+            "form": form,
+        },
+    )
+
+@login_required
+@transaction.atomic
+def edit_parking_ticket(request, ticket_id):
+    ticket = get_object_or_404(
+        Ticket.objects.select_related(
+            "customer",
+            "service",
+            "cash_day",
+            "created_by_employee",
+        ),
+        id=ticket_id,
+        ticket_type=Ticket.PARKING,
+    )
+
+    if ticket.status != Ticket.ACTIVE:
+        messages.error(
+            request,
+            "Solo se pueden editar parqueos activos.",
+        )
+        return redirect("tickets:parking_ticket_detail", ticket_id=ticket.id)
+
+    if request.method == "POST":
+        form = EditParkingTicketForm(request.POST, ticket=ticket)
+
+        if form.is_valid():
+            authorized_by_employee = form.cleaned_data["authorized_by_employee"]
+            otp_code = form.cleaned_data["otp_code"]
+            reason = form.cleaned_data["reason"]
+
+            is_valid_otp, otp_usage = validate_otp_authorization(
+                used_by_employee=request.user,
+                authorized_by_employee=authorized_by_employee,
+                ticket=ticket,
+                action_type=OtpUsage.EDIT_TICKET,
+                otp_code=otp_code,
+                reason=reason,
+            )
+
+            if not is_valid_otp:
+                messages.error(
+                    request,
+                    "El OTP ingresado no es correcto.",
+                )
+
+                AuditLog.objects.create(
+                    employee=request.user,
+                    ticket=ticket,
+                    otp_usage=otp_usage,
+                    action_type=AuditLog.EDIT_TICKET,
+                    entity_type="Ticket",
+                    entity_id=ticket.id,
+                    old_values={
+                        "status": ticket.status,
+                    },
+                    new_values={
+                        "attempt": "invalid_otp_for_edit_parking_ticket",
+                        "authorized_by_employee": authorized_by_employee.username,
+                    },
+                    reason=reason,
+                )
+
+                return render(
+                    request,
+                    "tickets/edit_parking_ticket.html",
+                    {
+                        "ticket": ticket,
+                        "form": form,
+                    },
+                )
+
+            old_values = {
+                "customer_name": ticket.customer_name_snapshot,
+                "customer_phone": ticket.customer_phone_snapshot,
+                "vehicle_plate": ticket.vehicle_plate,
+                "parking_entry_at": str(ticket.parking_entry_at),
+                "status": ticket.status,
+            }
+
+            customer_name = form.cleaned_data["customer_name"]
+            customer_phone = form.cleaned_data["customer_phone"]
+            vehicle_plate = form.cleaned_data["vehicle_plate"].upper().strip()
+
+            if ticket.customer:
+                ticket.customer.full_name = customer_name
+                ticket.customer.phone = customer_phone
+                ticket.customer.save(
+                    update_fields=[
+                        "full_name",
+                        "phone",
+                        "updated_at",
+                    ]
+                )
+
+            ticket.customer_name_snapshot = customer_name
+            ticket.customer_phone_snapshot = customer_phone
+            ticket.vehicle_plate = vehicle_plate
+            ticket.updated_by_employee = request.user
+
+            ticket.save(
+                update_fields=[
+                    "customer_name_snapshot",
+                    "customer_phone_snapshot",
+                    "vehicle_plate",
+                    "updated_by_employee",
+                    "updated_at",
+                ]
+            )
+
+            new_values = {
+                "customer_name": ticket.customer_name_snapshot,
+                "customer_phone": ticket.customer_phone_snapshot,
+                "vehicle_plate": ticket.vehicle_plate,
+                "parking_entry_at": str(ticket.parking_entry_at),
+                "status": ticket.status,
+                "authorized_by_employee": authorized_by_employee.username,
+            }
+
+            AuditLog.objects.create(
+                employee=request.user,
+                ticket=ticket,
+                otp_usage=otp_usage,
+                action_type=AuditLog.EDIT_TICKET,
+                entity_type="Ticket",
+                entity_id=ticket.id,
+                old_values=old_values,
+                new_values=new_values,
+                reason=reason,
+            )
+
+            messages.success(
+                request,
+                f"Ticket de parqueo {ticket.ticket_number} editado correctamente.",
+            )
+
+            return redirect("tickets:parking_ticket_detail", ticket_id=ticket.id)
+
+    else:
+        form = EditParkingTicketForm(ticket=ticket)
+
+    return render(
+        request,
+        "tickets/edit_parking_ticket.html",
         {
             "ticket": ticket,
             "form": form,
