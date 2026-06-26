@@ -10,6 +10,7 @@ from django.utils import timezone
 from audit.models import AuditLog, OtpUsage
 from audit.utils import validate_sensitive_action_authorization
 from cash.models import CashDay
+from cash.services import get_or_create_today_cash_day_for_operation
 from catalog.models import Service
 from payments.models import Payment
 from tickets.forms import (
@@ -54,12 +55,7 @@ def create_wash_ticket(request):
                 phone=customer_phone,
             )
 
-            cash_day, created = CashDay.objects.get_or_create(
-                business_date=timezone.localdate(),
-                defaults={
-                    "status": CashDay.OPEN,
-                },
-            )
+            cash_day = get_or_create_today_cash_day_for_operation()
 
             service_total = service.price_with_tax
             extras_total = sum(
@@ -187,12 +183,7 @@ def create_parking_ticket(request):
                 phone=customer_phone,
             )
 
-            cash_day, created = CashDay.objects.get_or_create(
-                business_date=timezone.localdate(),
-                defaults={
-                    "status": CashDay.OPEN,
-                },
-            )
+            cash_day = get_or_create_today_cash_day_for_operation()
 
             parking_service = get_object_or_404(
                 Service,

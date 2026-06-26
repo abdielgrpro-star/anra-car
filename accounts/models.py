@@ -37,7 +37,9 @@ class Employee(AbstractUser):
     )
 
     otp_secret = models.TextField(blank=True)
+    otp_current_code = models.CharField(max_length=20, blank=True)
     otp_enabled = models.BooleanField(default=False)
+    otp_generated_at = models.DateTimeField(null=True, blank=True)
 
     updated_at = models.DateTimeField(auto_now=True)
 

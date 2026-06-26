@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}Cerrar caja | Anracar{% endblock %}
+
+{% block content %}
+
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-danger text-white">
+                Confirmar cierre de caja
+            </div>
+
+            <div class="card-body">
+                <h1 class="h4 fw-bold">¿Está seguro de cerrar la caja del día?</h1>
+
+                <p class="text-muted">
+                    Al cerrar la caja, quedará marcada como cerrada. Si más tarde se necesita crear
+                    un ticket antes de las 9:00 pm, el sistema podrá reabrir la misma caja del día automáticamente.
+                </p>
+
+                <hr>
+
+                <p class="mb-1">
+                    <strong>Fecha:</strong> {{ cash_day.business_date|date:"d/m/Y" }}
+                </p>
+
+                <p class="mb-1">
+                    <strong>Abierta:</strong> {{ cash_day.opened_at|date:"d/m/Y H:i" }}
+                </p>
+
+                <p class="mb-1">
+                    <strong>Estado actual:</strong> {{ cash_day.get_status_display }}
+                </p>
+
+                <div class="alert alert-warning mt-3 mb-0">
+                    Esta acción no borra tickets ni pagos. Solo cierra la caja diaria.
+                </div>
+            </div>
+
+            <div class="card-footer bg-white d-flex justify-content-end gap-2">
+                <a href="{% url 'cash:cash_day_detail' %}" class="btn btn-outline-secondary">
+                    Cancelar
+                </a>
+
+                <form method="post" class="mb-0">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">
+                        Sí, cerrar caja
+                    </button>
+                </form>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+{% endblock %}

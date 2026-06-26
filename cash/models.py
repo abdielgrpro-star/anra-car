@@ -1,8 +1,7 @@
 from django.conf import settings
 from django.db import models
 
-# cashDay represent the total gains for the full day worked
-# this is a general cash day, this will not represent a cash day for an specific user
+
 class CashDay(models.Model):
     OPEN = "open"
     CLOSED = "closed"
@@ -30,6 +29,8 @@ class CashDay(models.Model):
         blank=True,
         related_name="closed_cash_days",
     )
+
+    closed_automatically = models.BooleanField(default=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

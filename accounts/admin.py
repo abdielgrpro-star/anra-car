@@ -1,68 +1,68 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 
-from .models import Employee, Role
-
-# Here are are going to be able to administer the roles and employees using the defaul /admin/ panel
+from accounts.models import Employee, Role
+from accounts.otp import set_new_otp_for_employee
 
 
 @admin.register(Role)
 class RoleAdmin(admin.ModelAdmin):
-    list_display = ("id", "name", "description")
-    search_fields = ("name",)
+    list_display = [
+        "name",
+        "description",
+    ]
 
 
 @admin.register(Employee)
 class EmployeeAdmin(UserAdmin):
-    model = Employee
+    actions = [
+        "generate_new_otp",
+    ]
 
-    list_display = (
-        "id",
-        "username",
-        "full_name",
-        "role",
-        "is_active",
-        "is_staff",
-        "is_superuser",
-    )
-
-    search_fields = (
+    list_display = [
         "username",
         "full_name",
         "email",
-    )
-
-    list_filter = (
         "role",
         "is_active",
-        "is_staff",
-        "is_superuser",
-    )
+        "otp_enabled",
+        "otp_current_code",
+        "otp_generated_at",
+    ]
 
     fieldsets = UserAdmin.fieldsets + (
         (
-            "Business information",
+            "Datos de Anracar",
             {
                 "fields": (
                     "full_name",
                     "role",
-                    "otp_secret",
                     "otp_enabled",
-                )
+                    "otp_current_code",
+                    "otp_generated_at",
+                ),
             },
         ),
     )
 
-    add_fieldsets = UserAdmin.add_fieldsets + (
-        (
-            "Business information",
-            {
-                "fields": (
-                    "full_name",
-                    "role",
-                    "otp_secret",
-                    "otp_enabled",
-                )
-            },
-        ),
-    )
+    readonly_fields = [
+        "otp_current_code",
+        "otp_generated_at",
+    ]
+
+    def generate_new_otp(self, request, queryset):
+        count = 0
+
+        for employee in queryset:
+            set_new_otp_for_employee(
+                employee,
+                send_email=True,
+            )
+            count += 1
+
+        self.message_user(
+            request,
+            f"Se generó un nuevo OTP para {count} usuario(s).",
+        )
+
+    generate_new_otp.short_description = "Generar nuevo OTP y enviar por correo"

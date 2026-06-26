@@ -1,14 +1,14 @@
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Sum
-from django.shortcuts import render, redirect
-from django.contrib import messages
-from accounts.permissions import user_can_authorize_sensitive_actions
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
+from accounts.permissions import user_can_authorize_sensitive_actions
 from cash.models import CashDay
+from cash.services import close_cash_day_manually, get_today_cash_day_for_view
 from payments.models import Payment
 from tickets.models import Ticket
-
 
 @login_required
 def cash_day_detail(request):
@@ -20,12 +20,7 @@ def cash_day_detail(request):
         return redirect("home")
     today = timezone.localdate()
 
-    cash_day, created = CashDay.objects.get_or_create(
-        business_date=today,
-        defaults={
-            "status": CashDay.OPEN,
-        },
-    )
+    cash_day = get_today_cash_day_for_view()
 
     payments = (
         Payment.objects
@@ -82,5 +77,44 @@ def cash_day_detail(request):
             "cancelled_tickets_count": cancelled_tickets_count,
             "first_ticket": first_ticket,
             "last_ticket": last_ticket,
+        },
+    )
+
+@login_required
+def close_cash_day_confirm(request):
+    if not user_can_authorize_sensitive_actions(request.user):
+        messages.error(
+            request,
+            "No tiene permisos para cerrar caja.",
+        )
+        return redirect("home")
+
+    cash_day = get_today_cash_day_for_view()
+
+    if request.method == "POST":
+        if cash_day.status == CashDay.CLOSED:
+            messages.warning(
+                request,
+                "La caja del día ya está cerrada.",
+            )
+            return redirect("cash:cash_day_detail")
+
+        close_cash_day_manually(
+            cash_day=cash_day,
+            closed_by_employee=request.user,
+        )
+
+        messages.success(
+            request,
+            "Caja del día cerrada correctamente.",
+        )
+
+        return redirect("cash:cash_day_detail")
+
+    return render(
+        request,
+        "cash/close_cash_day_confirm.html",
+        {
+            "cash_day": cash_day,
         },
     )

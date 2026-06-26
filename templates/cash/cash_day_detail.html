@@ -6,15 +6,43 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
-        <h1 class="h3 fw-bold mb-1">Caja del día</h1>
+        <h1 class="h3 fw-bold gap-2">Caja del día</h1>
+
         <p class="text-muted mb-0">
             Resumen de pagos y tickets del {{ cash_day.business_date|date:"d/m/Y" }}.
         </p>
+
+        <p class="text-muted mb-0">
+            Abierta: {{ cash_day.opened_at|date:"d/m/Y H:i" }}
+
+            {% if cash_day.closed_at %}
+            | Cerrada: {{ cash_day.closed_at|date:"d/m/Y H:i" }}
+            {% endif %}
+        </p>
+
+        {% if cash_day.status == "closed" %}
+        <p class="text-muted mb-0">
+            Cierre:
+            {% if cash_day.closed_automatically %}
+            automático
+            {% else %}
+            manual
+            {% endif %}
+        </p>
+        {% endif %}
     </div>
 
-    <span class="badge {% if cash_day.status == 'open' %}text-bg-success{% else %}text-bg-secondary{% endif %} fs-6">
-        {{ cash_day.get_status_display }}
-    </span>
+    <div class="d-flex align-items-center gap-2">
+        <span class="btn btn-success disabled px-4">
+            {{ cash_day.get_status_display }}
+        </span>
+
+        {% if cash_day.status == "open" %}
+        <a href="{% url 'cash:close_cash_day_confirm' %}" class="btn btn-danger px-4">
+            Cerrar caja
+        </a>
+        {% endif %}
+    </div>
 </div>
 
 <div class="row g-3 mb-4">
@@ -96,10 +124,10 @@
                 <small class="text-muted">Primer ticket del día</small>
 
                 {% if first_ticket %}
-                    <div class="fw-bold">{{ first_ticket.ticket_number }}</div>
-                    <div class="text-muted">{{ first_ticket.created_at|date:"d/m/Y H:i" }}</div>
+                <div class="fw-bold">{{ first_ticket.ticket_number }}</div>
+                <div class="text-muted">{{ first_ticket.created_at|date:"d/m/Y H:i" }}</div>
                 {% else %}
-                    <div class="text-muted">No hay tickets todavía.</div>
+                <div class="text-muted">No hay tickets todavía.</div>
                 {% endif %}
             </div>
         </div>
@@ -111,10 +139,10 @@
                 <small class="text-muted">Último ticket del día</small>
 
                 {% if last_ticket %}
-                    <div class="fw-bold">{{ last_ticket.ticket_number }}</div>
-                    <div class="text-muted">{{ last_ticket.created_at|date:"d/m/Y H:i" }}</div>
+                <div class="fw-bold">{{ last_ticket.ticket_number }}</div>
+                <div class="text-muted">{{ last_ticket.created_at|date:"d/m/Y H:i" }}</div>
                 {% else %}
-                    <div class="text-muted">No hay tickets todavía.</div>
+                <div class="text-muted">No hay tickets todavía.</div>
                 {% endif %}
             </div>
         </div>
@@ -130,67 +158,67 @@
     <div class="card-body">
 
         {% if payments %}
-            <div class="table-responsive">
-                <table class="table table-hover align-middle">
-                    <thead>
-                        <tr>
-                            <th>Hora</th>
-                            <th>Ticket</th>
-                            <th>Placa</th>
-                            <th>Método</th>
-                            <th>Cobrado por</th>
-                            <th class="text-end">Monto</th>
-                        </tr>
-                    </thead>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Hora</th>
+                        <th>Ticket</th>
+                        <th>Placa</th>
+                        <th>Método</th>
+                        <th>Cobrado por</th>
+                        <th class="text-end">Monto</th>
+                    </tr>
+                </thead>
 
-                    <tbody>
-                        {% for payment in payments %}
-                            <tr>
-                                <td>{{ payment.created_at|date:"H:i" }}</td>
+                <tbody>
+                    {% for payment in payments %}
+                    <tr>
+                        <td>{{ payment.created_at|date:"H:i" }}</td>
 
-                                <td>
-                                    <strong>{{ payment.ticket.ticket_number }}</strong>
-                                </td>
+                        <td>
+                            <strong>{{ payment.ticket.ticket_number }}</strong>
+                        </td>
 
-                                <td>
-                                    <span class="badge text-bg-dark">
-                                        {{ payment.ticket.vehicle_plate }}
-                                    </span>
-                                </td>
+                        <td>
+                            <span class="badge text-bg-dark">
+                                {{ payment.ticket.vehicle_plate }}
+                            </span>
+                        </td>
 
-                                <td>
-                                    {% if payment.payment_method == "cash" %}
-                                        <span class="badge text-bg-success">Efectivo</span>
-                                    {% elif payment.payment_method == "sinpe" %}
-                                        <span class="badge text-bg-primary">SINPE</span>
-                                    {% endif %}
+                        <td>
+                            {% if payment.payment_method == "cash" %}
+                            <span class="badge text-bg-success">Efectivo</span>
+                            {% elif payment.payment_method == "sinpe" %}
+                            <span class="badge text-bg-primary">SINPE</span>
+                            {% endif %}
 
-                                    {% if payment.sinpe_reference %}
-                                        <br>
-                                        <small class="text-muted">
-                                            Ref: {{ payment.sinpe_reference }}
-                                        </small>
-                                    {% endif %}
-                                </td>
+                            {% if payment.sinpe_reference %}
+                            <br>
+                            <small class="text-muted">
+                                Ref: {{ payment.sinpe_reference }}
+                            </small>
+                            {% endif %}
+                        </td>
 
-                                <td>{{ payment.received_by_employee }}</td>
+                        <td>{{ payment.received_by_employee }}</td>
 
-                                <td class="text-end fw-bold">
-                                    ₡{{ payment.amount }}
-                                </td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
+                        <td class="text-end fw-bold">
+                            ₡{{ payment.amount }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
 
-                </table>
-            </div>
+            </table>
+        </div>
         {% else %}
-            <div class="text-center py-5">
-                <h5 class="fw-bold">No hay pagos registrados</h5>
-                <p class="text-muted mb-0">
-                    Cuando se cobren tickets, aparecerán aquí.
-                </p>
-            </div>
+        <div class="text-center py-5">
+            <h5 class="fw-bold">No hay pagos registrados</h5>
+            <p class="text-muted mb-0">
+                Cuando se cobren tickets, aparecerán aquí.
+            </p>
+        </div>
         {% endif %}
 
     </div>
