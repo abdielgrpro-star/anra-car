@@ -7,11 +7,18 @@ from django.db import models, transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
-from audit.models import AuditLog
+from audit.models import AuditLog, OtpUsage
+from audit.utils import validate_otp_authorization
 from cash.models import CashDay
 from catalog.models import Service
 from payments.models import Payment
-from tickets.forms import ChargeWashTicketForm, ChargeParkingTicketForm, ParkingTicketForm, WashTicketForm
+from tickets.forms import (
+    ChargeParkingTicketForm,
+    ChargeWashTicketForm,
+    ChargeWithoutCodeForm,
+    ParkingTicketForm,
+    WashTicketForm,
+)
 from tickets.models import Customer, Ticket, TicketExtra
 from tickets.utils import (
     calculate_parking_total,
@@ -746,5 +753,323 @@ def all_tickets(request):
             "status": status,
             "ticket_type_choices": Ticket.TICKET_TYPE_CHOICES,
             "status_choices": Ticket.STATUS_CHOICES,
+        },
+    )
+
+#cobro de lavado sin codigo OTP
+@login_required
+@transaction.atomic
+def charge_wash_without_code(request, ticket_id):
+    ticket = get_object_or_404(
+        Ticket.objects.select_related(
+            "customer",
+            "service",
+            "cash_day",
+            "created_by_employee",
+        ).prefetch_related("ticket_extras"),
+        id=ticket_id,
+        ticket_type=Ticket.WASH,
+        status=Ticket.PENDING_PAYMENT,
+    )
+
+    if request.method == "POST":
+        form = ChargeWithoutCodeForm(request.POST)
+
+        if form.is_valid():
+            authorized_by_employee = form.cleaned_data["authorized_by_employee"]
+            otp_code = form.cleaned_data["otp_code"]
+            reason = form.cleaned_data["reason"]
+            payment_method = form.cleaned_data["payment_method"]
+            sinpe_reference = form.cleaned_data["sinpe_reference"].strip()
+
+            is_valid_otp, otp_usage = validate_otp_authorization(
+                used_by_employee=request.user,
+                authorized_by_employee=authorized_by_employee,
+                ticket=ticket,
+                action_type=OtpUsage.CLOSE_WITHOUT_CODE,
+                otp_code=otp_code,
+                reason=reason,
+            )
+
+            if not is_valid_otp:
+                messages.error(
+                    request,
+                    "El OTP ingresado no es correcto.",
+                )
+
+                AuditLog.objects.create(
+                    employee=request.user,
+                    ticket=ticket,
+                    otp_usage=otp_usage,
+                    action_type=AuditLog.CLOSE_WITHOUT_CODE,
+                    entity_type="Ticket",
+                    entity_id=ticket.id,
+                    old_values={
+                        "status": ticket.status,
+                    },
+                    new_values={
+                        "attempt": "invalid_otp_for_wash_without_code",
+                        "authorized_by_employee": authorized_by_employee.username,
+                    },
+                    reason=reason,
+                )
+
+                return render(
+                    request,
+                    "tickets/charge_without_code.html",
+                    {
+                        "ticket": ticket,
+                        "form": form,
+                        "ticket_kind": "lavado",
+                    },
+                )
+
+            old_values = {
+                "status": ticket.status,
+                "paid_at": str(ticket.paid_at),
+                "payment": None,
+            }
+
+            Payment.objects.create(
+                ticket=ticket,
+                cash_day=ticket.cash_day,
+                received_by_employee=request.user,
+                payment_method=payment_method,
+                amount=ticket.total_with_tax,
+                sinpe_reference=sinpe_reference,
+            )
+
+            ticket.status = Ticket.PAID
+            ticket.paid_at = timezone.now()
+            ticket.updated_by_employee = request.user
+            ticket.save(
+                update_fields=[
+                    "status",
+                    "paid_at",
+                    "updated_by_employee",
+                    "updated_at",
+                ]
+            )
+
+            AuditLog.objects.create(
+                employee=request.user,
+                ticket=ticket,
+                otp_usage=otp_usage,
+                action_type=AuditLog.CLOSE_WITHOUT_CODE,
+                entity_type="Ticket",
+                entity_id=ticket.id,
+                old_values=old_values,
+                new_values={
+                    "status": ticket.status,
+                    "paid_at": str(ticket.paid_at),
+                    "payment": {
+                        "method": payment_method,
+                        "amount": str(ticket.total_with_tax),
+                        "sinpe_reference": sinpe_reference,
+                    },
+                    "authorized_by_employee": authorized_by_employee.username,
+                },
+                reason=reason,
+            )
+
+            messages.success(
+                request,
+                f"Ticket {ticket.ticket_number} cobrado sin código con autorización OTP.",
+            )
+
+            return redirect("tickets:wash_ticket_detail", ticket_id=ticket.id)
+
+    else:
+        form = ChargeWithoutCodeForm()
+
+    return render(
+        request,
+        "tickets/charge_without_code.html",
+        {
+            "ticket": ticket,
+            "form": form,
+            "ticket_kind": "lavado",
+        },
+    )
+
+#cobro de parqueo sin otp
+@login_required
+@transaction.atomic
+def charge_parking_without_code(request, ticket_id):
+    ticket = get_object_or_404(
+        Ticket.objects.select_related(
+            "customer",
+            "service",
+            "cash_day",
+            "created_by_employee",
+        ),
+        id=ticket_id,
+        ticket_type=Ticket.PARKING,
+        status=Ticket.ACTIVE,
+    )
+
+    exit_at = timezone.now()
+
+    elapsed_seconds = (exit_at - ticket.parking_entry_at).total_seconds()
+    parking_minutes = int(elapsed_seconds // 60)
+
+    if parking_minutes < 1:
+        parking_minutes = 1
+
+    parking_total = calculate_parking_total(
+        minutes=parking_minutes,
+        first_hour_price=ticket.parking_first_hour_price_snapshot,
+        block_price=ticket.parking_block_price_snapshot,
+        block_minutes=ticket.parking_block_minutes_snapshot,
+    )
+
+    tax_data = calculate_tax_from_total(
+        total_with_tax=parking_total,
+        tax_rate=ticket.tax_rate,
+    )
+
+    if request.method == "POST":
+        form = ChargeWithoutCodeForm(request.POST)
+
+        if form.is_valid():
+            authorized_by_employee = form.cleaned_data["authorized_by_employee"]
+            otp_code = form.cleaned_data["otp_code"]
+            reason = form.cleaned_data["reason"]
+            payment_method = form.cleaned_data["payment_method"]
+            sinpe_reference = form.cleaned_data["sinpe_reference"].strip()
+
+            is_valid_otp, otp_usage = validate_otp_authorization(
+                used_by_employee=request.user,
+                authorized_by_employee=authorized_by_employee,
+                ticket=ticket,
+                action_type=OtpUsage.CLOSE_WITHOUT_CODE,
+                otp_code=otp_code,
+                reason=reason,
+            )
+
+            if not is_valid_otp:
+                messages.error(
+                    request,
+                    "El OTP ingresado no es correcto.",
+                )
+
+                AuditLog.objects.create(
+                    employee=request.user,
+                    ticket=ticket,
+                    otp_usage=otp_usage,
+                    action_type=AuditLog.CLOSE_WITHOUT_CODE,
+                    entity_type="Ticket",
+                    entity_id=ticket.id,
+                    old_values={
+                        "status": ticket.status,
+                    },
+                    new_values={
+                        "attempt": "invalid_otp_for_parking_without_code",
+                        "authorized_by_employee": authorized_by_employee.username,
+                    },
+                    reason=reason,
+                )
+
+                return render(
+                    request,
+                    "tickets/charge_without_code.html",
+                    {
+                        "ticket": ticket,
+                        "form": form,
+                        "ticket_kind": "parqueo",
+                        "exit_at": exit_at,
+                        "parking_minutes": parking_minutes,
+                        "parking_total": parking_total,
+                        "tax_data": tax_data,
+                    },
+                )
+
+            old_values = {
+                "status": ticket.status,
+                "parking_exit_at": str(ticket.parking_exit_at),
+                "parking_minutes": ticket.parking_minutes,
+                "total_with_tax": str(ticket.total_with_tax),
+                "payment": None,
+            }
+
+            Payment.objects.create(
+                ticket=ticket,
+                cash_day=ticket.cash_day,
+                received_by_employee=request.user,
+                payment_method=payment_method,
+                amount=parking_total,
+                sinpe_reference=sinpe_reference,
+            )
+
+            ticket.status = Ticket.PAID
+            ticket.parking_exit_at = exit_at
+            ticket.parking_minutes = parking_minutes
+            ticket.subtotal_without_tax = tax_data["subtotal_without_tax"]
+            ticket.tax_amount = tax_data["tax_amount"]
+            ticket.total_with_tax = tax_data["total_with_tax"]
+            ticket.paid_at = exit_at
+            ticket.updated_by_employee = request.user
+
+            ticket.save(
+                update_fields=[
+                    "status",
+                    "parking_exit_at",
+                    "parking_minutes",
+                    "subtotal_without_tax",
+                    "tax_amount",
+                    "total_with_tax",
+                    "paid_at",
+                    "updated_by_employee",
+                    "updated_at",
+                ]
+            )
+
+            AuditLog.objects.create(
+                employee=request.user,
+                ticket=ticket,
+                otp_usage=otp_usage,
+                action_type=AuditLog.CLOSE_WITHOUT_CODE,
+                entity_type="Ticket",
+                entity_id=ticket.id,
+                old_values=old_values,
+                new_values={
+                    "status": ticket.status,
+                    "parking_entry_at": str(ticket.parking_entry_at),
+                    "parking_exit_at": str(ticket.parking_exit_at),
+                    "parking_minutes": ticket.parking_minutes,
+                    "payment": {
+                        "method": payment_method,
+                        "amount": str(parking_total),
+                        "sinpe_reference": sinpe_reference,
+                    },
+                    "subtotal_without_tax": str(ticket.subtotal_without_tax),
+                    "tax_amount": str(ticket.tax_amount),
+                    "total_with_tax": str(ticket.total_with_tax),
+                    "authorized_by_employee": authorized_by_employee.username,
+                },
+                reason=reason,
+            )
+
+            messages.success(
+                request,
+                f"Ticket de parqueo {ticket.ticket_number} cobrado sin código con autorización OTP.",
+            )
+
+            return redirect("tickets:parking_ticket_detail", ticket_id=ticket.id)
+
+    else:
+        form = ChargeWithoutCodeForm()
+
+    return render(
+        request,
+        "tickets/charge_without_code.html",
+        {
+            "ticket": ticket,
+            "form": form,
+            "ticket_kind": "parqueo",
+            "exit_at": exit_at,
+            "parking_minutes": parking_minutes,
+            "parking_total": parking_total,
+            "tax_data": tax_data,
         },
     )

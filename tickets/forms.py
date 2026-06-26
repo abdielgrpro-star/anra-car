@@ -1,5 +1,5 @@
 from django import forms
-
+from audit.forms import OtpAuthorizationForm
 from catalog.models import Extra, Service
 
 
@@ -152,6 +152,35 @@ class ChargeParkingTicketForm(forms.Form):
             "autocomplete": "off",
         }),
     )
+
+    payment_method = forms.ChoiceField(
+        label="Método de pago",
+        choices=PAYMENT_METHOD_CHOICES,
+        required=True,
+        widget=forms.Select(attrs={
+            "class": "form-select",
+        }),
+    )
+
+    sinpe_reference = forms.CharField(
+        label="Referencia SINPE",
+        max_length=100,
+        required=False,
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+            "placeholder": "Opcional",
+        }),
+    )
+
+
+class ChargeWithoutCodeForm(OtpAuthorizationForm):
+    CASH = "cash"
+    SINPE = "sinpe"
+
+    PAYMENT_METHOD_CHOICES = [
+        (CASH, "Efectivo"),
+        (SINPE, "SINPE"),
+    ]
 
     payment_method = forms.ChoiceField(
         label="Método de pago",

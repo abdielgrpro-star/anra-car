@@ -79,16 +79,16 @@
                 <h6 class="fw-bold">Extras</h6>
 
                 {% if ticket.ticket_extras.all %}
-                    <ul class="mb-0">
-                        {% for ticket_extra in ticket.ticket_extras.all %}
-                            <li>
-                                {{ ticket_extra.extra_name_snapshot }}
-                                — ₡{{ ticket_extra.extra_price_with_tax_snapshot }}
-                            </li>
-                        {% endfor %}
-                    </ul>
+                <ul class="mb-0">
+                    {% for ticket_extra in ticket.ticket_extras.all %}
+                    <li>
+                        {{ ticket_extra.extra_name_snapshot }}
+                        — ₡{{ ticket_extra.extra_price_with_tax_snapshot }}
+                    </li>
+                    {% endfor %}
+                </ul>
                 {% else %}
-                    <p class="text-muted mb-0">Sin extras</p>
+                <p class="text-muted mb-0">Sin extras</p>
                 {% endif %}
 
                 <hr>
@@ -131,14 +131,20 @@
                 </div>
             </div>
 
-            <div class="card-footer bg-white d-flex justify-content-end gap-2">
-                <a href="{% url 'tickets:pending_wash_tickets' %}" class="btn btn-outline-secondary">
-                    Cancelar
+            <div class="card-footer bg-white d-flex justify-content-between gap-2">
+                <a href="{% url 'tickets:charge_wash_without_code' ticket.id %}" class="btn btn-outline-danger">
+                    Cobrar sin código
                 </a>
 
-                <button type="submit" class="btn btn-success">
-                    Confirmar pago
-                </button>
+                <div class="d-flex gap-2">
+                    <a href="{% url 'tickets:pending_wash_tickets' %}" class="btn btn-outline-secondary">
+                        Cancelar
+                    </a>
+
+                    <button type="submit" class="btn btn-success">
+                        Confirmar pago
+                    </button>
+                </div>
             </div>
         </form>
 
