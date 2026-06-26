@@ -1763,14 +1763,21 @@ def edit_parking_ticket(request, ticket_id):
         return redirect("tickets:parking_ticket_detail", ticket_id=ticket.id)
 
     if request.method == "POST":
-        form = EditParkingTicketForm(request.POST, ticket=ticket)
+        form = EditParkingTicketForm(
+            request.POST,
+            ticket=ticket,
+            request_user=request.user,
+        )
 
         if form.is_valid():
-            authorized_by_employee = form.cleaned_data["authorized_by_employee"]
-            otp_code = form.cleaned_data["otp_code"]
             reason = form.cleaned_data["reason"]
 
-            is_valid_otp, otp_usage = validate_otp_authorization(
+            authorized_by_employee = form.cleaned_data.get(
+                "authorized_by_employee"
+            )
+            otp_code = form.cleaned_data.get("otp_code")
+
+            is_authorized, otp_usage, final_authorizer = validate_sensitive_action_authorization(
                 used_by_employee=request.user,
                 authorized_by_employee=authorized_by_employee,
                 ticket=ticket,
@@ -1779,7 +1786,7 @@ def edit_parking_ticket(request, ticket_id):
                 reason=reason,
             )
 
-            if not is_valid_otp:
+            if not is_authorized:
                 messages.error(
                     request,
                     "El OTP ingresado no es correcto.",
@@ -1794,10 +1801,15 @@ def edit_parking_ticket(request, ticket_id):
                     entity_id=ticket.id,
                     old_values={
                         "status": ticket.status,
+                        "parking_entry_at": str(ticket.parking_entry_at),
                     },
                     new_values={
-                        "attempt": "invalid_otp_for_edit_parking_ticket",
-                        "authorized_by_employee": authorized_by_employee.username,
+                        "attempt": "invalid_authorization_for_edit_parking_ticket",
+                        "authorized_by_employee": (
+                            authorized_by_employee.username
+                            if authorized_by_employee
+                            else None
+                        ),
                     },
                     reason=reason,
                 )
@@ -1817,6 +1829,7 @@ def edit_parking_ticket(request, ticket_id):
                 "vehicle_plate": ticket.vehicle_plate,
                 "parking_entry_at": str(ticket.parking_entry_at),
                 "status": ticket.status,
+                "total_with_tax": str(ticket.total_with_tax),
             }
 
             customer_name = form.cleaned_data["customer_name"]
@@ -1855,7 +1868,13 @@ def edit_parking_ticket(request, ticket_id):
                 "vehicle_plate": ticket.vehicle_plate,
                 "parking_entry_at": str(ticket.parking_entry_at),
                 "status": ticket.status,
-                "authorized_by_employee": authorized_by_employee.username,
+                "total_with_tax": str(ticket.total_with_tax),
+                "authorized_by_employee": (
+                    final_authorizer.username
+                    if final_authorizer
+                    else None
+                ),
+                "used_otp": otp_usage is not None,
             }
 
             AuditLog.objects.create(
@@ -1878,7 +1897,10 @@ def edit_parking_ticket(request, ticket_id):
             return redirect("tickets:parking_ticket_detail", ticket_id=ticket.id)
 
     else:
-        form = EditParkingTicketForm(ticket=ticket)
+        form = EditParkingTicketForm(
+            ticket=ticket,
+            request_user=request.user,
+        )
 
     return render(
         request,
