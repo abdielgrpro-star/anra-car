@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Inicio | Anracar{% endblock %}
+
+{% block content %}
+
+<div class="row mb-4">
+    <div class="col">
+        <h1 class="h3 fw-bold">Panel principal</h1>
+        <p class="text-muted">
+            Sistema local para gestión de lavados, parqueo, pagos y caja diaria.
+        </p>
+    </div>
+</div>
+
+<div class="row g-3">
+
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <h5 class="card-title">Crear lavado</h5>
+                <p class="card-text text-muted">
+                    Crear ticket de lavado con extras y total automático.
+                </p>
+                <a href="#" class="btn btn-primary w-100">Nuevo lavado</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <h5 class="card-title">Parqueo</h5>
+                <p class="card-text text-muted">
+                    Crear entrada de parqueo y cobrar por tiempo.
+                </p>
+                <a href="#" class="btn btn-primary w-100">Nuevo parqueo</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <h5 class="card-title">Tickets pendientes</h5>
+                <p class="card-text text-muted">
+                    Buscar tickets pendientes de pago o parqueos activos.
+                </p>
+                <a href="#" class="btn btn-outline-dark w-100">Ver tickets</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <h5 class="card-title">Caja del día</h5>
+                <p class="card-text text-muted">
+                    Ver efectivo, SINPE y total general del día.
+                </p>
+                <a href="#" class="btn btn-outline-dark w-100">Ver caja</a>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}
