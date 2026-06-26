@@ -3,7 +3,7 @@ from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.hashers import make_password
-from django.db import transaction
+from django.db import models, transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
@@ -179,5 +179,36 @@ def wash_ticket_detail(request, ticket_id):
         {
             "ticket": ticket,
             "closing_code": closing_code,
+        },
+    )
+
+@login_required
+def pending_wash_tickets(request):
+    tickets = (
+        Ticket.objects
+        .select_related("customer", "service", "cash_day", "created_by_employee")
+        .filter(
+            ticket_type=Ticket.WASH,
+            status=Ticket.PENDING_PAYMENT,
+        )
+        .order_by("-created_at")
+    )
+
+    search_query = request.GET.get("q", "").strip()
+
+    if search_query:
+        tickets = tickets.filter(
+            models.Q(ticket_number__icontains=search_query)
+            | models.Q(vehicle_plate__icontains=search_query)
+            | models.Q(customer_name_snapshot__icontains=search_query)
+            | models.Q(customer_phone_snapshot__icontains=search_query)
+        )
+
+    return render(
+        request,
+        "tickets/pending_wash_tickets.html",
+        {
+            "tickets": tickets,
+            "search_query": search_query,
         },
     )
