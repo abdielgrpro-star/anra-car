@@ -12,8 +12,10 @@
 
 <body class="bg-light">
 
+    {% if request.user.is_authenticated %}
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container-fluid">
+
             <a class="navbar-brand fw-bold" href="{% url 'home' %}">
                 Anracar
             </a>
@@ -23,6 +25,7 @@
             </button>
 
             <div class="collapse navbar-collapse" id="mainNavbar">
+
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0">
 
                     <li class="nav-item">
@@ -55,26 +58,58 @@
                         </a>
                     </li>
 
+                    {% if request.user.is_admin_user or request.user.is_technical_admin or request.user.is_superuser %}
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'cash:cash_day_detail' %}">
                             Caja del día
                         </a>
                     </li>
+                    {% endif %}
+
+                    {% if request.user.is_admin_user or request.user.is_technical_admin or request.user.is_superuser %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'admin:index' %}">
+                            Panel admin
+                        </a>
+                    </li>
+                    {% endif %}
 
                 </ul>
 
-                <span class="navbar-text text-white">
-                    {% if request.user.is_authenticated %}
-                    {{ request.user.username }}
-                    {% else %}
-                    Invitado
-                    {% endif %}
-                </span>
+                <div class="d-flex align-items-center gap-3">
+
+                    <span class="navbar-text text-white">
+                        {{ request.user.username }}
+
+                        {% if request.user.role %}
+                        <small class="text-white-50">
+                            ({{ request.user.role.get_name_display }})
+                        </small>
+                        {% endif %}
+                    </span>
+
+                    <form method="post" action="{% url 'accounts:logout' %}" class="mb-0">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-sm btn-outline-light">
+                            Cerrar sesión
+                        </button>
+                    </form>
+
+                </div>
+
             </div>
         </div>
     </nav>
+    {% endif %}
 
     <main class="container py-4">
+        {% if request.user.is_authenticated and request.resolver_match.url_name != "home" %}
+        <div class="d-flex justify-content-end mb-3 no-print">
+            <a href="{% url 'home' %}" class="btn btn-outline-primary">
+                ← Volver al inicio
+            </a>
+        </div>
+        {% endif %}
         {% if messages %}
         {% for message in messages %}
         <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">

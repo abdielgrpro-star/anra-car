@@ -85,6 +85,7 @@
         </div>
     </div>
 
+    {% if request.user.is_admin_user or request.user.is_technical_admin or request.user.is_superuser %}
     <div class="col-md-4">
         <div class="card shadow-sm border-0 h-100">
             <div class="card-body">
@@ -98,6 +99,7 @@
             </div>
         </div>
     </div>
+    {% endif %}
 
 </div>
 

@@ -22,6 +22,7 @@ from tickets.views import home
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("", home, name="home"),
+    path("", include("accounts.urls")),
     path("tickets/", include("tickets.urls")),
     path("cash/", include("cash.urls")),
 ]

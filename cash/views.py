@@ -1,6 +1,8 @@
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Sum
-from django.shortcuts import render
+from django.shortcuts import render, redirect
+from django.contrib import messages
+from accounts.permissions import user_can_authorize_sensitive_actions
 from django.utils import timezone
 
 from cash.models import CashDay
@@ -10,6 +12,12 @@ from tickets.models import Ticket
 
 @login_required
 def cash_day_detail(request):
+    if not user_can_authorize_sensitive_actions(request.user):
+        messages.error(
+            request,
+            "No tiene permisos para ver la caja del día.",
+        )
+        return redirect("home")
     today = timezone.localdate()
 
     cash_day, created = CashDay.objects.get_or_create(

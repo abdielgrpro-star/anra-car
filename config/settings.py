@@ -134,6 +134,6 @@ STATICFILES_DIRS = [
 # we are using our Employee moodel instead the normal auth.User
 AUTH_USER_MODEL = "accounts.Employee"
 
-LOGIN_URL = "/admin/login/"
+LOGIN_URL = "/login/"
 LOGIN_REDIRECT_URL = "/"
-LOGOUT_REDIRECT_URL = "/admin/login/"
+LOGOUT_REDIRECT_URL = "/login/"
