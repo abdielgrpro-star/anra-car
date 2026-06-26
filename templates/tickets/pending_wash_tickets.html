@@ -91,8 +91,14 @@
                                 Ver
                             </a>
 
+                            <a href="{% url 'tickets:edit_wash_ticket' ticket.id %}" class="btn btn-sm btn-warning">
+                                Editar
+                            </a>
+
                             <a href="{% url 'tickets:charge_wash_ticket' ticket.id %}" class="btn btn-sm btn-success">
-                                Cobrar </a>
+                                Cobrar
+                            </a>
+
                             <a href="{% url 'tickets:cancel_ticket' ticket.id %}" class="btn btn-sm btn-outline-danger">
                                 Anular
                             </a>

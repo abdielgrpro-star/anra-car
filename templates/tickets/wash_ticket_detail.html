@@ -14,6 +14,15 @@
 
             <div class="d-flex gap-2">
                 {% if ticket.status == "pending_payment" %}
+                <a href="{% url 'tickets:edit_wash_ticket' ticket.id %}" class="btn btn-warning">
+                    Editar
+                </a>
+
+                <a href="{% url 'tickets:charge_wash_ticket' ticket.id %}" class="btn btn-success">
+                    Cobrar
+                </a>
+                {% endif %}
+
                 <a href="{% url 'tickets:reprint_ticket' ticket.id %}" class="btn btn-primary">
                     {% if ticket.print_count == 0 %}
                     Imprimir ticket
@@ -21,7 +30,6 @@
                     Reimprimir ticket
                     {% endif %}
                 </a>
-                {% endif %}
             </div>
         </div>
 

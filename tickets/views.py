@@ -17,9 +17,10 @@ from tickets.forms import (
     ChargeParkingTicketForm,
     ChargeWashTicketForm,
     ChargeWithoutCodeForm,
+    EditWashTicketForm,
     ParkingTicketForm,
-    WashTicketForm,
     ReprintTicketForm,
+    WashTicketForm,
 )
 from tickets.models import Customer, Ticket, TicketExtra
 from tickets.utils import (
@@ -1400,6 +1401,238 @@ def reprint_ticket(request, ticket_id):
     return render(
         request,
         "tickets/reprint_ticket.html",
+        {
+            "ticket": ticket,
+            "form": form,
+        },
+    )
+
+
+@login_required
+@transaction.atomic
+def edit_wash_ticket(request, ticket_id):
+    ticket = get_object_or_404(
+        Ticket.objects.select_related(
+            "customer",
+            "service",
+            "cash_day",
+            "created_by_employee",
+        ).prefetch_related("ticket_extras"),
+        id=ticket_id,
+        ticket_type=Ticket.WASH,
+    )
+
+    if ticket.status != Ticket.PENDING_PAYMENT:
+        messages.error(
+            request,
+            "Solo se pueden editar lavados pendientes de pago.",
+        )
+        return redirect("tickets:wash_ticket_detail", ticket_id=ticket.id)
+
+    if request.method == "POST":
+        form = EditWashTicketForm(request.POST, ticket=ticket)
+
+        if form.is_valid():
+            authorized_by_employee = form.cleaned_data["authorized_by_employee"]
+            otp_code = form.cleaned_data["otp_code"]
+            reason = form.cleaned_data["reason"]
+
+            is_valid_otp, otp_usage = validate_otp_authorization(
+                used_by_employee=request.user,
+                authorized_by_employee=authorized_by_employee,
+                ticket=ticket,
+                action_type=OtpUsage.EDIT_TICKET,
+                otp_code=otp_code,
+                reason=reason,
+            )
+
+            if not is_valid_otp:
+                messages.error(
+                    request,
+                    "El OTP ingresado no es correcto.",
+                )
+
+                AuditLog.objects.create(
+                    employee=request.user,
+                    ticket=ticket,
+                    otp_usage=otp_usage,
+                    action_type=AuditLog.EDIT_TICKET,
+                    entity_type="Ticket",
+                    entity_id=ticket.id,
+                    old_values={
+                        "status": ticket.status,
+                    },
+                    new_values={
+                        "attempt": "invalid_otp_for_edit_wash_ticket",
+                        "authorized_by_employee": authorized_by_employee.username,
+                    },
+                    reason=reason,
+                )
+
+                return render(
+                    request,
+                    "tickets/edit_wash_ticket.html",
+                    {
+                        "ticket": ticket,
+                        "form": form,
+                    },
+                )
+
+            old_ticket_extras = list(ticket.ticket_extras.all())
+
+            old_values = {
+                "customer_name": ticket.customer_name_snapshot,
+                "customer_phone": ticket.customer_phone_snapshot,
+                "vehicle_plate": ticket.vehicle_plate,
+                "service": {
+                    "id": ticket.service.id,
+                    "name": ticket.service_name_snapshot,
+                    "price_with_tax": str(ticket.service_price_with_tax_snapshot),
+                },
+                "extras": [
+                    {
+                        "id": ticket_extra.extra.id,
+                        "name": ticket_extra.extra_name_snapshot,
+                        "price_with_tax": str(ticket_extra.extra_price_with_tax_snapshot),
+                    }
+                    for ticket_extra in old_ticket_extras
+                ],
+                "subtotal_without_tax": str(ticket.subtotal_without_tax),
+                "tax_amount": str(ticket.tax_amount),
+                "discount_amount": str(ticket.discount_amount),
+                "total_with_tax": str(ticket.total_with_tax),
+            }
+
+            customer_name = form.cleaned_data["customer_name"]
+            customer_phone = form.cleaned_data["customer_phone"]
+            vehicle_plate = form.cleaned_data["vehicle_plate"].upper().strip()
+            service = form.cleaned_data["service"]
+            extras = form.cleaned_data["extras"]
+
+            service_total = service.price_with_tax
+            extras_total = sum(
+                (extra.price_with_tax for extra in extras),
+                Decimal("0.00"),
+            )
+
+            total_with_tax = service_total + extras_total
+
+            tax_data = calculate_tax_from_total(
+                total_with_tax=total_with_tax,
+                tax_rate=service.tax_rate,
+            )
+
+            if ticket.customer:
+                ticket.customer.full_name = customer_name
+                ticket.customer.phone = customer_phone
+                ticket.customer.save(
+                    update_fields=[
+                        "full_name",
+                        "phone",
+                        "updated_at",
+                    ]
+                )
+
+            ticket.customer_name_snapshot = customer_name
+            ticket.customer_phone_snapshot = customer_phone
+            ticket.vehicle_plate = vehicle_plate
+
+            ticket.service = service
+            ticket.service_name_snapshot = service.name
+            ticket.service_price_with_tax_snapshot = service.price_with_tax
+
+            ticket.subtotal_without_tax = tax_data["subtotal_without_tax"]
+            ticket.tax_rate = service.tax_rate
+            ticket.tax_amount = tax_data["tax_amount"]
+            ticket.total_with_tax = tax_data["total_with_tax"]
+
+            ticket.updated_by_employee = request.user
+
+            ticket.save(
+                update_fields=[
+                    "customer_name_snapshot",
+                    "customer_phone_snapshot",
+                    "vehicle_plate",
+                    "service",
+                    "service_name_snapshot",
+                    "service_price_with_tax_snapshot",
+                    "subtotal_without_tax",
+                    "tax_rate",
+                    "tax_amount",
+                    "total_with_tax",
+                    "updated_by_employee",
+                    "updated_at",
+                ]
+            )
+
+            ticket.ticket_extras.all().delete()
+
+            for extra in extras:
+                extra_tax_data = calculate_tax_from_total(
+                    total_with_tax=extra.price_with_tax,
+                    tax_rate=extra.tax_rate,
+                )
+
+                TicketExtra.objects.create(
+                    ticket=ticket,
+                    extra=extra,
+                    extra_name_snapshot=extra.name,
+                    extra_price_with_tax_snapshot=extra.price_with_tax,
+                    tax_rate_snapshot=extra.tax_rate,
+                    subtotal_without_tax=extra_tax_data["subtotal_without_tax"],
+                    tax_amount=extra_tax_data["tax_amount"],
+                    total_with_tax=extra_tax_data["total_with_tax"],
+                )
+
+            new_values = {
+                "customer_name": ticket.customer_name_snapshot,
+                "customer_phone": ticket.customer_phone_snapshot,
+                "vehicle_plate": ticket.vehicle_plate,
+                "service": {
+                    "id": ticket.service.id,
+                    "name": ticket.service_name_snapshot,
+                    "price_with_tax": str(ticket.service_price_with_tax_snapshot),
+                },
+                "extras": [
+                    {
+                        "id": ticket_extra.extra.id,
+                        "name": ticket_extra.extra_name_snapshot,
+                        "price_with_tax": str(ticket_extra.extra_price_with_tax_snapshot),
+                    }
+                    for ticket_extra in ticket.ticket_extras.all()
+                ],
+                "subtotal_without_tax": str(ticket.subtotal_without_tax),
+                "tax_amount": str(ticket.tax_amount),
+                "discount_amount": str(ticket.discount_amount),
+                "total_with_tax": str(ticket.total_with_tax),
+                "authorized_by_employee": authorized_by_employee.username,
+            }
+
+            AuditLog.objects.create(
+                employee=request.user,
+                ticket=ticket,
+                otp_usage=otp_usage,
+                action_type=AuditLog.EDIT_TICKET,
+                entity_type="Ticket",
+                entity_id=ticket.id,
+                old_values=old_values,
+                new_values=new_values,
+                reason=reason,
+            )
+
+            messages.success(
+                request,
+                f"Ticket {ticket.ticket_number} editado correctamente.",
+            )
+
+            return redirect("tickets:wash_ticket_detail", ticket_id=ticket.id)
+
+    else:
+        form = EditWashTicketForm(ticket=ticket)
+
+    return render(
+        request,
+        "tickets/edit_wash_ticket.html",
         {
             "ticket": ticket,
             "form": form,

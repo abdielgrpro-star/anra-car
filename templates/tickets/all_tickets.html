@@ -176,6 +176,9 @@
                             </a>
 
                             {% if ticket.status == "pending_payment" %}
+                            <a href="{% url 'tickets:edit_wash_ticket' ticket.id %}" class="btn btn-sm btn-warning">
+                                Editar
+                            </a>
                             <a href="{% url 'tickets:charge_wash_ticket' ticket.id %}" class="btn btn-sm btn-success">
                                 Cobrar
                             </a>
