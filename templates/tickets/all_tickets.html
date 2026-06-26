@@ -211,11 +211,6 @@
                             </a>
                             {% endif %}
 
-                            {% if ticket.status == "active" %}
-                            <a href="{% url 'tickets:cancel_ticket' ticket.id %}" class="btn btn-sm btn-outline-danger">
-                                Anular
-                            </a>
-                            {% endif %}
                             {% endif %}
                         </td>
                     </tr>

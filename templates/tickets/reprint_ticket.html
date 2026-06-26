@@ -16,19 +16,19 @@
             </div>
 
             {% if ticket.ticket_type == "wash" %}
-                <a href="{% url 'tickets:wash_ticket_detail' ticket.id %}" class="btn btn-outline-secondary">
-                    Volver
-                </a>
+            <a href="{% url 'tickets:wash_ticket_detail' ticket.id %}" class="btn btn-outline-secondary">
+                Volver
+            </a>
             {% elif ticket.ticket_type == "parking" %}
-                <a href="{% url 'tickets:parking_ticket_detail' ticket.id %}" class="btn btn-outline-secondary">
-                    Volver
-                </a>
+            <a href="{% url 'tickets:parking_ticket_detail' ticket.id %}" class="btn btn-outline-secondary">
+                Volver
+            </a>
             {% endif %}
         </div>
 
         <div class="alert alert-warning">
             Este ticket ya fue impreso {{ ticket.print_count }} vez/veces.
-            Para reimprimirlo se requiere OTP y motivo.
+            La reimpresión quedará registrada en auditoría.
         </div>
 
         <div class="card shadow-sm border-0 mb-3">
@@ -58,10 +58,10 @@
                 </p>
 
                 {% if ticket.last_printed_at %}
-                    <p class="mb-1">
-                        <strong>Última impresión:</strong>
-                        {{ ticket.last_printed_at|date:"d/m/Y H:i" }}
-                    </p>
+                <p class="mb-1">
+                    <strong>Última impresión:</strong>
+                    {{ ticket.last_printed_at|date:"d/m/Y H:i" }}
+                </p>
                 {% endif %}
             </div>
         </div>
@@ -70,19 +70,23 @@
             {% csrf_token %}
 
             <div class="card-body">
-                <h5 class="card-title mb-3">Autorización OTP</h5>
+                <h5 class="card-title mb-3">Autorización</h5>
 
+                {% if form.authorized_by_employee %}
                 <div class="mb-3">
                     <label class="form-label">{{ form.authorized_by_employee.label }}</label>
                     {{ form.authorized_by_employee }}
                     {{ form.authorized_by_employee.errors }}
                 </div>
+                {% endif %}
 
+                {% if form.otp_code %}
                 <div class="mb-3">
                     <label class="form-label">{{ form.otp_code.label }}</label>
                     {{ form.otp_code }}
                     {{ form.otp_code.errors }}
                 </div>
+                {% endif %}
 
                 <div class="mb-3">
                     <label class="form-label">{{ form.reason.label }}</label>
@@ -96,13 +100,13 @@
 
             <div class="card-footer bg-white d-flex justify-content-end gap-2">
                 {% if ticket.ticket_type == "wash" %}
-                    <a href="{% url 'tickets:wash_ticket_detail' ticket.id %}" class="btn btn-outline-secondary">
-                        Cancelar
-                    </a>
+                <a href="{% url 'tickets:wash_ticket_detail' ticket.id %}" class="btn btn-outline-secondary">
+                    Cancelar
+                </a>
                 {% elif ticket.ticket_type == "parking" %}
-                    <a href="{% url 'tickets:parking_ticket_detail' ticket.id %}" class="btn btn-outline-secondary">
-                        Cancelar
-                    </a>
+                <a href="{% url 'tickets:parking_ticket_detail' ticket.id %}" class="btn btn-outline-secondary">
+                    Cancelar
+                </a>
                 {% endif %}
 
                 <button type="submit" class="btn btn-warning">

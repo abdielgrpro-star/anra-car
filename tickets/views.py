@@ -8,7 +8,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from audit.models import AuditLog, OtpUsage
-from audit.utils import validate_otp_authorization
+from audit.utils import validate_sensitive_action_authorization
 from cash.models import CashDay
 from catalog.models import Service
 from payments.models import Payment
@@ -779,16 +779,23 @@ def charge_wash_without_code(request, ticket_id):
     )
 
     if request.method == "POST":
-        form = ChargeWithoutCodeForm(request.POST)
+        form = ChargeWithoutCodeForm(
+            request.POST,
+            request_user=request.user,
+        )
 
         if form.is_valid():
-            authorized_by_employee = form.cleaned_data["authorized_by_employee"]
-            otp_code = form.cleaned_data["otp_code"]
             reason = form.cleaned_data["reason"]
+
+            authorized_by_employee = form.cleaned_data.get(
+                "authorized_by_employee"
+            )
+            otp_code = form.cleaned_data.get("otp_code")
+
             payment_method = form.cleaned_data["payment_method"]
             sinpe_reference = form.cleaned_data["sinpe_reference"].strip()
 
-            is_valid_otp, otp_usage = validate_otp_authorization(
+            is_authorized, otp_usage, final_authorizer = validate_sensitive_action_authorization(
                 used_by_employee=request.user,
                 authorized_by_employee=authorized_by_employee,
                 ticket=ticket,
@@ -797,7 +804,7 @@ def charge_wash_without_code(request, ticket_id):
                 reason=reason,
             )
 
-            if not is_valid_otp:
+            if not is_authorized:
                 messages.error(
                     request,
                     "El OTP ingresado no es correcto.",
@@ -814,8 +821,12 @@ def charge_wash_without_code(request, ticket_id):
                         "status": ticket.status,
                     },
                     new_values={
-                        "attempt": "invalid_otp_for_wash_without_code",
-                        "authorized_by_employee": authorized_by_employee.username,
+                        "attempt": "invalid_authorization_for_wash_without_code",
+                        "authorized_by_employee": (
+                            authorized_by_employee.username
+                            if authorized_by_employee
+                            else None
+                        ),
                     },
                     reason=reason,
                 )
@@ -873,20 +884,27 @@ def charge_wash_without_code(request, ticket_id):
                         "amount": str(ticket.total_with_tax),
                         "sinpe_reference": sinpe_reference,
                     },
-                    "authorized_by_employee": authorized_by_employee.username,
+                    "authorized_by_employee": (
+                        final_authorizer.username
+                        if final_authorizer
+                        else None
+                    ),
+                    "used_otp": otp_usage is not None,
                 },
                 reason=reason,
             )
 
             messages.success(
                 request,
-                f"Ticket {ticket.ticket_number} cobrado sin código con autorización OTP.",
+                f"Ticket {ticket.ticket_number} cobrado sin código correctamente.",
             )
 
             return redirect("tickets:wash_ticket_detail", ticket_id=ticket.id)
 
     else:
-        form = ChargeWithoutCodeForm()
+        form = ChargeWithoutCodeForm(
+            request_user=request.user,
+        )
 
     return render(
         request,
@@ -935,16 +953,23 @@ def charge_parking_without_code(request, ticket_id):
     )
 
     if request.method == "POST":
-        form = ChargeWithoutCodeForm(request.POST)
+        form = ChargeWithoutCodeForm(
+            request.POST,
+            request_user=request.user,
+        )
 
         if form.is_valid():
-            authorized_by_employee = form.cleaned_data["authorized_by_employee"]
-            otp_code = form.cleaned_data["otp_code"]
             reason = form.cleaned_data["reason"]
+
+            authorized_by_employee = form.cleaned_data.get(
+                "authorized_by_employee"
+            )
+            otp_code = form.cleaned_data.get("otp_code")
+
             payment_method = form.cleaned_data["payment_method"]
             sinpe_reference = form.cleaned_data["sinpe_reference"].strip()
 
-            is_valid_otp, otp_usage = validate_otp_authorization(
+            is_authorized, otp_usage, final_authorizer = validate_sensitive_action_authorization(
                 used_by_employee=request.user,
                 authorized_by_employee=authorized_by_employee,
                 ticket=ticket,
@@ -953,7 +978,7 @@ def charge_parking_without_code(request, ticket_id):
                 reason=reason,
             )
 
-            if not is_valid_otp:
+            if not is_authorized:
                 messages.error(
                     request,
                     "El OTP ingresado no es correcto.",
@@ -970,8 +995,12 @@ def charge_parking_without_code(request, ticket_id):
                         "status": ticket.status,
                     },
                     new_values={
-                        "attempt": "invalid_otp_for_parking_without_code",
-                        "authorized_by_employee": authorized_by_employee.username,
+                        "attempt": "invalid_authorization_for_parking_without_code",
+                        "authorized_by_employee": (
+                            authorized_by_employee.username
+                            if authorized_by_employee
+                            else None
+                        ),
                     },
                     reason=reason,
                 )
@@ -994,6 +1023,8 @@ def charge_parking_without_code(request, ticket_id):
                 "status": ticket.status,
                 "parking_exit_at": str(ticket.parking_exit_at),
                 "parking_minutes": ticket.parking_minutes,
+                "subtotal_without_tax": str(ticket.subtotal_without_tax),
+                "tax_amount": str(ticket.tax_amount),
                 "total_with_tax": str(ticket.total_with_tax),
                 "payment": None,
             }
@@ -1051,20 +1082,27 @@ def charge_parking_without_code(request, ticket_id):
                     "subtotal_without_tax": str(ticket.subtotal_without_tax),
                     "tax_amount": str(ticket.tax_amount),
                     "total_with_tax": str(ticket.total_with_tax),
-                    "authorized_by_employee": authorized_by_employee.username,
+                    "authorized_by_employee": (
+                        final_authorizer.username
+                        if final_authorizer
+                        else None
+                    ),
+                    "used_otp": otp_usage is not None,
                 },
                 reason=reason,
             )
 
             messages.success(
                 request,
-                f"Ticket de parqueo {ticket.ticket_number} cobrado sin código con autorización OTP.",
+                f"Ticket de parqueo {ticket.ticket_number} cobrado sin código correctamente.",
             )
 
             return redirect("tickets:parking_ticket_detail", ticket_id=ticket.id)
 
     else:
-        form = ChargeWithoutCodeForm()
+        form = ChargeWithoutCodeForm(
+            request_user=request.user,
+        )
 
     return render(
         request,
@@ -1079,6 +1117,7 @@ def charge_parking_without_code(request, ticket_id):
             "tax_data": tax_data,
         },
     )
+
 
 @login_required
 @transaction.atomic
@@ -1101,14 +1140,21 @@ def cancel_ticket(request, ticket_id):
         return redirect("tickets:all_tickets")
 
     if request.method == "POST":
-        form = CancelTicketForm(request.POST)
+        form = CancelTicketForm(
+            request.POST,
+            request_user=request.user,
+        )
 
         if form.is_valid():
-            authorized_by_employee = form.cleaned_data["authorized_by_employee"]
-            otp_code = form.cleaned_data["otp_code"]
             reason = form.cleaned_data["reason"]
 
-            is_valid_otp, otp_usage = validate_otp_authorization(
+            authorized_by_employee = form.cleaned_data.get(
+                "authorized_by_employee"
+            )
+
+            otp_code = form.cleaned_data.get("otp_code")
+
+            is_authorized, otp_usage, final_authorizer = validate_sensitive_action_authorization(
                 used_by_employee=request.user,
                 authorized_by_employee=authorized_by_employee,
                 ticket=ticket,
@@ -1117,7 +1163,7 @@ def cancel_ticket(request, ticket_id):
                 reason=reason,
             )
 
-            if not is_valid_otp:
+            if not is_authorized:
                 messages.error(
                     request,
                     "El OTP ingresado no es correcto.",
@@ -1134,8 +1180,12 @@ def cancel_ticket(request, ticket_id):
                         "status": ticket.status,
                     },
                     new_values={
-                        "attempt": "invalid_otp_for_cancel_ticket",
-                        "authorized_by_employee": authorized_by_employee.username,
+                        "attempt": "invalid_authorization_for_cancel_ticket",
+                        "authorized_by_employee": (
+                            authorized_by_employee.username
+                            if authorized_by_employee
+                            else None
+                        ),
                     },
                     reason=reason,
                 )
@@ -1183,7 +1233,12 @@ def cancel_ticket(request, ticket_id):
                     "status": ticket.status,
                     "cancelled_at": str(ticket.cancelled_at),
                     "updated_by_employee": request.user.username,
-                    "authorized_by_employee": authorized_by_employee.username,
+                    "authorized_by_employee": (
+                        final_authorizer.username
+                        if final_authorizer
+                        else None
+                    ),
+                    "used_otp": otp_usage is not None,
                 },
                 reason=reason,
             )
@@ -1202,7 +1257,9 @@ def cancel_ticket(request, ticket_id):
             return redirect("tickets:all_tickets")
 
     else:
-        form = CancelTicketForm()
+        form = CancelTicketForm(
+            request_user=request.user,
+        )
 
     return render(
         request,
@@ -1285,22 +1342,30 @@ def reprint_ticket(request, ticket_id):
             "service",
             "cash_day",
             "created_by_employee",
+            "last_printed_by_employee",
         ).prefetch_related("ticket_extras"),
         id=ticket_id,
     )
 
+    # Si nunca se ha impreso, la primera impresión no requiere OTP.
     if ticket.print_count == 0:
         return redirect("tickets:print_ticket", ticket_id=ticket.id)
 
     if request.method == "POST":
-        form = ReprintTicketForm(request.POST)
+        form = ReprintTicketForm(
+            request.POST,
+            request_user=request.user,
+        )
 
         if form.is_valid():
-            authorized_by_employee = form.cleaned_data["authorized_by_employee"]
-            otp_code = form.cleaned_data["otp_code"]
             reason = form.cleaned_data["reason"]
 
-            is_valid_otp, otp_usage = validate_otp_authorization(
+            authorized_by_employee = form.cleaned_data.get(
+                "authorized_by_employee"
+            )
+            otp_code = form.cleaned_data.get("otp_code")
+
+            is_authorized, otp_usage, final_authorizer = validate_sensitive_action_authorization(
                 used_by_employee=request.user,
                 authorized_by_employee=authorized_by_employee,
                 ticket=ticket,
@@ -1309,7 +1374,7 @@ def reprint_ticket(request, ticket_id):
                 reason=reason,
             )
 
-            if not is_valid_otp:
+            if not is_authorized:
                 messages.error(
                     request,
                     "El OTP ingresado no es correcto.",
@@ -1324,10 +1389,20 @@ def reprint_ticket(request, ticket_id):
                     entity_id=ticket.id,
                     old_values={
                         "print_count": ticket.print_count,
+                        "last_printed_at": str(ticket.last_printed_at),
+                        "last_printed_by_employee": (
+                            ticket.last_printed_by_employee.username
+                            if ticket.last_printed_by_employee
+                            else None
+                        ),
                     },
                     new_values={
-                        "attempt": "invalid_otp_for_reprint",
-                        "authorized_by_employee": authorized_by_employee.username,
+                        "attempt": "invalid_authorization_for_reprint",
+                        "authorized_by_employee": (
+                            authorized_by_employee.username
+                            if authorized_by_employee
+                            else None
+                        ),
                     },
                     reason=reason,
                 )
@@ -1378,7 +1453,12 @@ def reprint_ticket(request, ticket_id):
                     "print_count": ticket.print_count,
                     "last_printed_at": str(ticket.last_printed_at),
                     "last_printed_by_employee": request.user.username,
-                    "authorized_by_employee": authorized_by_employee.username,
+                    "authorized_by_employee": (
+                        final_authorizer.username
+                        if final_authorizer
+                        else None
+                    ),
+                    "used_otp": otp_usage is not None,
                 },
                 reason=reason,
             )
@@ -1397,7 +1477,9 @@ def reprint_ticket(request, ticket_id):
             )
 
     else:
-        form = ReprintTicketForm()
+        form = ReprintTicketForm(
+            request_user=request.user,
+        )
 
     return render(
         request,
@@ -1431,14 +1513,21 @@ def edit_wash_ticket(request, ticket_id):
         return redirect("tickets:wash_ticket_detail", ticket_id=ticket.id)
 
     if request.method == "POST":
-        form = EditWashTicketForm(request.POST, ticket=ticket)
+        form = EditWashTicketForm(
+            request.POST,
+            ticket=ticket,
+            request_user=request.user,
+        )
 
         if form.is_valid():
-            authorized_by_employee = form.cleaned_data["authorized_by_employee"]
-            otp_code = form.cleaned_data["otp_code"]
             reason = form.cleaned_data["reason"]
 
-            is_valid_otp, otp_usage = validate_otp_authorization(
+            authorized_by_employee = form.cleaned_data.get(
+                "authorized_by_employee"
+            )
+            otp_code = form.cleaned_data.get("otp_code")
+
+            is_authorized, otp_usage, final_authorizer = validate_sensitive_action_authorization(
                 used_by_employee=request.user,
                 authorized_by_employee=authorized_by_employee,
                 ticket=ticket,
@@ -1447,7 +1536,7 @@ def edit_wash_ticket(request, ticket_id):
                 reason=reason,
             )
 
-            if not is_valid_otp:
+            if not is_authorized:
                 messages.error(
                     request,
                     "El OTP ingresado no es correcto.",
@@ -1464,8 +1553,12 @@ def edit_wash_ticket(request, ticket_id):
                         "status": ticket.status,
                     },
                     new_values={
-                        "attempt": "invalid_otp_for_edit_wash_ticket",
-                        "authorized_by_employee": authorized_by_employee.username,
+                        "attempt": "invalid_authorization_for_edit_wash_ticket",
+                        "authorized_by_employee": (
+                            authorized_by_employee.username
+                            if authorized_by_employee
+                            else None
+                        ),
                     },
                     reason=reason,
                 )
@@ -1606,7 +1699,12 @@ def edit_wash_ticket(request, ticket_id):
                 "tax_amount": str(ticket.tax_amount),
                 "discount_amount": str(ticket.discount_amount),
                 "total_with_tax": str(ticket.total_with_tax),
-                "authorized_by_employee": authorized_by_employee.username,
+                "authorized_by_employee": (
+                    final_authorizer.username
+                    if final_authorizer
+                    else None
+                ),
+                "used_otp": otp_usage is not None,
             }
 
             AuditLog.objects.create(
@@ -1629,7 +1727,10 @@ def edit_wash_ticket(request, ticket_id):
             return redirect("tickets:wash_ticket_detail", ticket_id=ticket.id)
 
     else:
-        form = EditWashTicketForm(ticket=ticket)
+        form = EditWashTicketForm(
+            ticket=ticket,
+            request_user=request.user,
+        )
 
     return render(
         request,
