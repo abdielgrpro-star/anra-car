@@ -61,3 +61,43 @@ class WashTicketForm(forms.Form):
         self.fields["extras"].queryset = Extra.objects.filter(
             is_active=True,
         )
+
+
+class ChargeWashTicketForm(forms.Form):
+    CASH = "cash"
+    SINPE = "sinpe"
+
+    PAYMENT_METHOD_CHOICES = [
+        (CASH, "Efectivo"),
+        (SINPE, "SINPE"),
+    ]
+
+    closing_code = forms.CharField(
+        label="Código de cierre",
+        max_length=20,
+        required=True,
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+            "placeholder": "Ej: K7M9-Q2XA-P4R8",
+            "autocomplete": "off",
+        }),
+    )
+
+    payment_method = forms.ChoiceField(
+        label="Método de pago",
+        choices=PAYMENT_METHOD_CHOICES,
+        required=True,
+        widget=forms.Select(attrs={
+            "class": "form-select",
+        }),
+    )
+
+    sinpe_reference = forms.CharField(
+        label="Referencia SINPE",
+        max_length=100,
+        required=False,
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+            "placeholder": "Opcional",
+        }),
+    )

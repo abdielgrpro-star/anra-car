@@ -2,14 +2,15 @@ from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.hashers import make_password
+from django.contrib.auth.hashers import make_password, check_password
 from django.db import models, transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from audit.models import AuditLog
 from cash.models import CashDay
-from tickets.forms import WashTicketForm
+from payments.models import Payment
+from tickets.forms import WashTicketForm, ChargeWashTicketForm
 from tickets.models import Customer, Ticket, TicketExtra
 from tickets.utils import (
     calculate_tax_from_total,
@@ -210,5 +211,143 @@ def pending_wash_tickets(request):
         {
             "tickets": tickets,
             "search_query": search_query,
+        },
+    )
+
+@login_required
+@transaction.atomic
+def charge_wash_ticket(request, ticket_id):
+    ticket = get_object_or_404(
+        Ticket.objects.select_related(
+            "customer",
+            "service",
+            "cash_day",
+            "created_by_employee",
+        ).prefetch_related("ticket_extras"),
+        id=ticket_id,
+        ticket_type=Ticket.WASH,
+        status=Ticket.PENDING_PAYMENT,
+    )
+
+    if request.method == "POST":
+        form = ChargeWashTicketForm(request.POST)
+
+        if form.is_valid():
+            closing_code = form.cleaned_data["closing_code"].upper().strip()
+            payment_method = form.cleaned_data["payment_method"]
+            sinpe_reference = form.cleaned_data["sinpe_reference"].strip()
+
+            is_valid_code = check_password(
+                closing_code,
+                ticket.closing_code_hash,
+            )
+
+            if not is_valid_code:
+                messages.error(
+                    request,
+                    "El código de cierre no es correcto.",
+                )
+
+                AuditLog.objects.create(
+                    employee=request.user,
+                    ticket=ticket,
+                    action_type=AuditLog.CLOSE_WITHOUT_CODE,
+                    entity_type="Ticket",
+                    entity_id=ticket.id,
+                    old_values={
+                        "status": ticket.status,
+                    },
+                    new_values={
+                        "attempt": "invalid_closing_code",
+                    },
+                    reason="Intento fallido de cobro con código incorrecto",
+                )
+
+                return render(
+                    request,
+                    "tickets/charge_wash_ticket.html",
+                    {
+                        "ticket": ticket,
+                        "form": form,
+                    },
+                )
+
+            if payment_method == Payment.SINPE and not sinpe_reference:
+                form.add_error(
+                    "sinpe_reference",
+                    "La referencia SINPE es recomendable para este método de pago.",
+                )
+
+                return render(
+                    request,
+                    "tickets/charge_wash_ticket.html",
+                    {
+                        "ticket": ticket,
+                        "form": form,
+                    },
+                )
+
+            old_values = {
+                "status": ticket.status,
+                "paid_at": str(ticket.paid_at),
+                "payment": None,
+            }
+
+            Payment.objects.create(
+                ticket=ticket,
+                cash_day=ticket.cash_day,
+                received_by_employee=request.user,
+                payment_method=payment_method,
+                amount=ticket.total_with_tax,
+                sinpe_reference=sinpe_reference,
+            )
+
+            ticket.status = Ticket.PAID
+            ticket.paid_at = timezone.now()
+            ticket.updated_by_employee = request.user
+            ticket.save(
+                update_fields=[
+                    "status",
+                    "paid_at",
+                    "updated_by_employee",
+                    "updated_at",
+                ]
+            )
+
+            AuditLog.objects.create(
+                employee=request.user,
+                ticket=ticket,
+                action_type=AuditLog.CHARGE_WASH_TICKET,
+                entity_type="Ticket",
+                entity_id=ticket.id,
+                old_values=old_values,
+                new_values={
+                    "status": ticket.status,
+                    "paid_at": str(ticket.paid_at),
+                    "payment": {
+                        "method": payment_method,
+                        "amount": str(ticket.total_with_tax),
+                        "sinpe_reference": sinpe_reference,
+                    },
+                },
+                reason="Ticket de lavado cobrado",
+            )
+
+            messages.success(
+                request,
+                f"Ticket {ticket.ticket_number} cobrado correctamente.",
+            )
+
+            return redirect("tickets:wash_ticket_detail", ticket_id=ticket.id)
+
+    else:
+        form = ChargeWashTicketForm()
+
+    return render(
+        request,
+        "tickets/charge_wash_ticket.html",
+        {
+            "ticket": ticket,
+            "form": form,
         },
     )

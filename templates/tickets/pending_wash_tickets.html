@@ -21,13 +21,8 @@
     <div class="card-body">
         <form method="get" class="row g-2">
             <div class="col-md-10">
-                <input
-                    type="text"
-                    name="q"
-                    value="{{ search_query }}"
-                    class="form-control"
-                    placeholder="Buscar por ticket, placa, cliente o teléfono"
-                >
+                <input type="text" name="q" value="{{ search_query }}" class="form-control"
+                    placeholder="Buscar por ticket, placa, cliente o teléfono">
             </div>
 
             <div class="col-md-2 d-grid">
@@ -43,84 +38,78 @@
     <div class="card-body">
 
         {% if tickets %}
-            <div class="table-responsive">
-                <table class="table table-hover align-middle">
-                    <thead>
-                        <tr>
-                            <th>Ticket</th>
-                            <th>Cliente</th>
-                            <th>Placa</th>
-                            <th>Servicio</th>
-                            <th>Total</th>
-                            <th>Fecha</th>
-                            <th class="text-end">Acciones</th>
-                        </tr>
-                    </thead>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Ticket</th>
+                        <th>Cliente</th>
+                        <th>Placa</th>
+                        <th>Servicio</th>
+                        <th>Total</th>
+                        <th>Fecha</th>
+                        <th class="text-end">Acciones</th>
+                    </tr>
+                </thead>
 
-                    <tbody>
-                        {% for ticket in tickets %}
-                            <tr>
-                                <td>
-                                    <strong>{{ ticket.ticket_number }}</strong>
-                                </td>
+                <tbody>
+                    {% for ticket in tickets %}
+                    <tr>
+                        <td>
+                            <strong>{{ ticket.ticket_number }}</strong>
+                        </td>
 
-                                <td>
-                                    {{ ticket.customer_name_snapshot|default:"No indicado" }}
-                                    <br>
-                                    <small class="text-muted">
-                                        {{ ticket.customer_phone_snapshot|default:"Sin teléfono" }}
-                                    </small>
-                                </td>
+                        <td>
+                            {{ ticket.customer_name_snapshot|default:"No indicado" }}
+                            <br>
+                            <small class="text-muted">
+                                {{ ticket.customer_phone_snapshot|default:"Sin teléfono" }}
+                            </small>
+                        </td>
 
-                                <td>
-                                    <span class="badge text-bg-dark">
-                                        {{ ticket.vehicle_plate }}
-                                    </span>
-                                </td>
+                        <td>
+                            <span class="badge text-bg-dark">
+                                {{ ticket.vehicle_plate }}
+                            </span>
+                        </td>
 
-                                <td>
-                                    {{ ticket.service_name_snapshot }}
-                                </td>
+                        <td>
+                            {{ ticket.service_name_snapshot }}
+                        </td>
 
-                                <td>
-                                    <strong>₡{{ ticket.total_with_tax }}</strong>
-                                </td>
+                        <td>
+                            <strong>₡{{ ticket.total_with_tax }}</strong>
+                        </td>
 
-                                <td>
-                                    {{ ticket.created_at|date:"d/m/Y H:i" }}
-                                </td>
+                        <td>
+                            {{ ticket.created_at|date:"d/m/Y H:i" }}
+                        </td>
 
-                                <td class="text-end">
-                                    <a
-                                        href="{% url 'tickets:wash_ticket_detail' ticket.id %}"
-                                        class="btn btn-sm btn-outline-secondary"
-                                    >
-                                        Ver
-                                    </a>
+                        <td class="text-end">
+                            <a href="{% url 'tickets:wash_ticket_detail' ticket.id %}"
+                                class="btn btn-sm btn-outline-secondary">
+                                Ver
+                            </a>
 
-                                    <a
-                                        href="#"
-                                        class="btn btn-sm btn-success"
-                                    >
-                                        Cobrar
-                                    </a>
-                                </td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+                            <a href="{% url 'tickets:charge_wash_ticket' ticket.id %}" class="btn btn-sm btn-success">
+                                Cobrar </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
         {% else %}
-            <div class="text-center py-5">
-                <h5 class="fw-bold">No hay tickets pendientes</h5>
-                <p class="text-muted mb-3">
-                    Cuando crees tickets de lavado pendientes de pago, aparecerán aquí.
-                </p>
+        <div class="text-center py-5">
+            <h5 class="fw-bold">No hay tickets pendientes</h5>
+            <p class="text-muted mb-3">
+                Cuando crees tickets de lavado pendientes de pago, aparecerán aquí.
+            </p>
 
-                <a href="{% url 'tickets:create_wash_ticket' %}" class="btn btn-primary">
-                    Crear primer ticket
-                </a>
-            </div>
+            <a href="{% url 'tickets:create_wash_ticket' %}" class="btn btn-primary">
+                Crear primer ticket
+            </a>
+        </div>
         {% endif %}
 
     </div>
