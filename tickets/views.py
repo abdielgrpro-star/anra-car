@@ -13,6 +13,7 @@ from cash.models import CashDay
 from catalog.models import Service
 from payments.models import Payment
 from tickets.forms import (
+    CancelTicketForm,
     ChargeParkingTicketForm,
     ChargeWashTicketForm,
     ChargeWithoutCodeForm,
@@ -1071,5 +1072,138 @@ def charge_parking_without_code(request, ticket_id):
             "parking_minutes": parking_minutes,
             "parking_total": parking_total,
             "tax_data": tax_data,
+        },
+    )
+
+@login_required
+@transaction.atomic
+def cancel_ticket(request, ticket_id):
+    ticket = get_object_or_404(
+        Ticket.objects.select_related(
+            "customer",
+            "service",
+            "cash_day",
+            "created_by_employee",
+        ),
+        id=ticket_id,
+    )
+
+    if ticket.status not in [Ticket.PENDING_PAYMENT, Ticket.ACTIVE]:
+        messages.error(
+            request,
+            "Solo se pueden anular tickets pendientes o parqueos activos.",
+        )
+        return redirect("tickets:all_tickets")
+
+    if request.method == "POST":
+        form = CancelTicketForm(request.POST)
+
+        if form.is_valid():
+            authorized_by_employee = form.cleaned_data["authorized_by_employee"]
+            otp_code = form.cleaned_data["otp_code"]
+            reason = form.cleaned_data["reason"]
+
+            is_valid_otp, otp_usage = validate_otp_authorization(
+                used_by_employee=request.user,
+                authorized_by_employee=authorized_by_employee,
+                ticket=ticket,
+                action_type=OtpUsage.CANCEL_TICKET,
+                otp_code=otp_code,
+                reason=reason,
+            )
+
+            if not is_valid_otp:
+                messages.error(
+                    request,
+                    "El OTP ingresado no es correcto.",
+                )
+
+                AuditLog.objects.create(
+                    employee=request.user,
+                    ticket=ticket,
+                    otp_usage=otp_usage,
+                    action_type=AuditLog.CANCEL_TICKET,
+                    entity_type="Ticket",
+                    entity_id=ticket.id,
+                    old_values={
+                        "status": ticket.status,
+                    },
+                    new_values={
+                        "attempt": "invalid_otp_for_cancel_ticket",
+                        "authorized_by_employee": authorized_by_employee.username,
+                    },
+                    reason=reason,
+                )
+
+                return render(
+                    request,
+                    "tickets/cancel_ticket.html",
+                    {
+                        "ticket": ticket,
+                        "form": form,
+                    },
+                )
+
+            old_values = {
+                "status": ticket.status,
+                "cancelled_at": str(ticket.cancelled_at),
+                "updated_by_employee": (
+                    ticket.updated_by_employee.username
+                    if ticket.updated_by_employee
+                    else None
+                ),
+            }
+
+            ticket.status = Ticket.CANCELLED
+            ticket.cancelled_at = timezone.now()
+            ticket.updated_by_employee = request.user
+            ticket.save(
+                update_fields=[
+                    "status",
+                    "cancelled_at",
+                    "updated_by_employee",
+                    "updated_at",
+                ]
+            )
+
+            AuditLog.objects.create(
+                employee=request.user,
+                ticket=ticket,
+                otp_usage=otp_usage,
+                action_type=AuditLog.CANCEL_TICKET,
+                entity_type="Ticket",
+                entity_id=ticket.id,
+                old_values=old_values,
+                new_values={
+                    "status": ticket.status,
+                    "cancelled_at": str(ticket.cancelled_at),
+                    "updated_by_employee": request.user.username,
+                    "authorized_by_employee": authorized_by_employee.username,
+                },
+                reason=reason,
+            )
+
+            messages.success(
+                request,
+                f"Ticket {ticket.ticket_number} anulado correctamente.",
+            )
+
+            if ticket.ticket_type == Ticket.WASH:
+                return redirect("tickets:pending_wash_tickets")
+
+            if ticket.ticket_type == Ticket.PARKING:
+                return redirect("tickets:active_parking_tickets")
+
+            return redirect("tickets:all_tickets")
+
+    else:
+        form = CancelTicketForm()
+
+    return render(
+        request,
+        "tickets/cancel_ticket.html",
+        {
+            "ticket": ticket,
+            "form": form,
         },
     )

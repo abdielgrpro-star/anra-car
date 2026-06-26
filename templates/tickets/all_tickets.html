@@ -23,12 +23,7 @@
 
             <div class="col-md-3">
                 <label class="form-label">Fecha de caja</label>
-                <input
-                    type="date"
-                    name="date"
-                    value="{{ date_query }}"
-                    class="form-control"
-                >
+                <input type="date" name="date" value="{{ date_query }}" class="form-control">
             </div>
 
             <div class="col-md-3">
@@ -37,9 +32,9 @@
                     <option value="">Todos</option>
 
                     {% for value, label in ticket_type_choices %}
-                        <option value="{{ value }}" {% if ticket_type == value %}selected{% endif %}>
-                            {{ label }}
-                        </option>
+                    <option value="{{ value }}" {% if ticket_type == value %}selected{% endif %}>
+                        {{ label }}
+                    </option>
                     {% endfor %}
                 </select>
             </div>
@@ -50,22 +45,17 @@
                     <option value="">Todos</option>
 
                     {% for value, label in status_choices %}
-                        <option value="{{ value }}" {% if status == value %}selected{% endif %}>
-                            {{ label }}
-                        </option>
+                    <option value="{{ value }}" {% if status == value %}selected{% endif %}>
+                        {{ label }}
+                    </option>
                     {% endfor %}
                 </select>
             </div>
 
             <div class="col-md-3">
                 <label class="form-label">Buscar</label>
-                <input
-                    type="text"
-                    name="q"
-                    value="{{ search_query }}"
-                    class="form-control"
-                    placeholder="Ticket, placa, cliente..."
-                >
+                <input type="text" name="q" value="{{ search_query }}" class="form-control"
+                    placeholder="Ticket, placa, cliente...">
             </div>
 
             <div class="col-md-12 d-flex justify-content-end gap-2">
@@ -86,143 +76,146 @@
     <div class="card-body">
 
         {% if tickets %}
-            <div class="table-responsive">
-                <table class="table table-hover align-middle">
-                    <thead>
-                        <tr>
-                            <th>Ticket</th>
-                            <th>Tipo</th>
-                            <th>Estado</th>
-                            <th>Cliente</th>
-                            <th>Placa</th>
-                            <th>Caja</th>
-                            <th>Total</th>
-                            <th>Creado</th>
-                            <th>Pagado</th>
-                            <th class="text-end">Acciones</th>
-                        </tr>
-                    </thead>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Ticket</th>
+                        <th>Tipo</th>
+                        <th>Estado</th>
+                        <th>Cliente</th>
+                        <th>Placa</th>
+                        <th>Caja</th>
+                        <th>Total</th>
+                        <th>Creado</th>
+                        <th>Pagado</th>
+                        <th class="text-end">Acciones</th>
+                    </tr>
+                </thead>
 
-                    <tbody>
-                        {% for ticket in tickets %}
-                            <tr>
-                                <td>
-                                    <strong>{{ ticket.ticket_number }}</strong>
-                                </td>
+                <tbody>
+                    {% for ticket in tickets %}
+                    <tr>
+                        <td>
+                            <strong>{{ ticket.ticket_number }}</strong>
+                        </td>
 
-                                <td>
-                                    {% if ticket.ticket_type == "wash" %}
-                                        <span class="badge text-bg-info">Lavado</span>
-                                    {% elif ticket.ticket_type == "parking" %}
-                                        <span class="badge text-bg-primary">Parqueo</span>
-                                    {% endif %}
-                                </td>
+                        <td>
+                            {% if ticket.ticket_type == "wash" %}
+                            <span class="badge text-bg-info">Lavado</span>
+                            {% elif ticket.ticket_type == "parking" %}
+                            <span class="badge text-bg-primary">Parqueo</span>
+                            {% endif %}
+                        </td>
 
-                                <td>
-                                    {% if ticket.status == "pending_payment" %}
-                                        <span class="badge text-bg-warning">Pendiente</span>
-                                    {% elif ticket.status == "active" %}
-                                        <span class="badge text-bg-primary">Activo</span>
-                                    {% elif ticket.status == "paid" %}
-                                        <span class="badge text-bg-success">Pagado</span>
-                                    {% elif ticket.status == "cancelled" %}
-                                        <span class="badge text-bg-danger">Anulado</span>
-                                    {% else %}
-                                        <span class="badge text-bg-secondary">{{ ticket.get_status_display }}</span>
-                                    {% endif %}
-                                </td>
+                        <td>
+                            {% if ticket.status == "pending_payment" %}
+                            <span class="badge text-bg-warning">Pendiente</span>
+                            {% elif ticket.status == "active" %}
+                            <span class="badge text-bg-primary">Activo</span>
+                            {% elif ticket.status == "paid" %}
+                            <span class="badge text-bg-success">Pagado</span>
+                            {% elif ticket.status == "cancelled" %}
+                            <span class="badge text-bg-danger">Anulado</span>
+                            {% else %}
+                            <span class="badge text-bg-secondary">{{ ticket.get_status_display }}</span>
+                            {% endif %}
+                        </td>
 
-                                <td>
-                                    {{ ticket.customer_name_snapshot|default:"No indicado" }}
-                                    <br>
-                                    <small class="text-muted">
-                                        {{ ticket.customer_phone_snapshot|default:"Sin teléfono" }}
-                                    </small>
-                                </td>
+                        <td>
+                            {{ ticket.customer_name_snapshot|default:"No indicado" }}
+                            <br>
+                            <small class="text-muted">
+                                {{ ticket.customer_phone_snapshot|default:"Sin teléfono" }}
+                            </small>
+                        </td>
 
-                                <td>
-                                    <span class="badge text-bg-dark">
-                                        {{ ticket.vehicle_plate }}
-                                    </span>
-                                </td>
+                        <td>
+                            <span class="badge text-bg-dark">
+                                {{ ticket.vehicle_plate }}
+                            </span>
+                        </td>
 
-                                <td>
-                                    {{ ticket.cash_day.business_date|date:"d/m/Y" }}
-                                    <br>
-                                    <small class="text-muted">
-                                        Caja #{{ ticket.cash_day.id }}
-                                    </small>
-                                </td>
+                        <td>
+                            {{ ticket.cash_day.business_date|date:"d/m/Y" }}
+                            <br>
+                            <small class="text-muted">
+                                Caja #{{ ticket.cash_day.id }}
+                            </small>
+                        </td>
 
-                                <td>
-                                    <strong>₡{{ ticket.total_with_tax }}</strong>
-                                </td>
+                        <td>
+                            <strong>₡{{ ticket.total_with_tax }}</strong>
+                        </td>
 
-                                <td>
-                                    {{ ticket.created_at|date:"d/m/Y H:i" }}
-                                </td>
+                        <td>
+                            {{ ticket.created_at|date:"d/m/Y H:i" }}
+                        </td>
 
-                                <td>
-                                    {% if ticket.paid_at %}
-                                        {{ ticket.paid_at|date:"d/m/Y H:i" }}
-                                    {% else %}
-                                        <span class="text-muted">No pagado</span>
-                                    {% endif %}
-                                </td>
+                        <td>
+                            {% if ticket.paid_at %}
+                            {{ ticket.paid_at|date:"d/m/Y H:i" }}
+                            {% else %}
+                            <span class="text-muted">No pagado</span>
+                            {% endif %}
+                        </td>
 
-                                <td class="text-end">
-                                    {% if ticket.ticket_type == "wash" %}
-                                        <a
-                                            href="{% url 'tickets:wash_ticket_detail' ticket.id %}"
-                                            class="btn btn-sm btn-outline-secondary"
-                                        >
-                                            Ver
-                                        </a>
+                        <td class="text-end">
+                            {% if ticket.ticket_type == "wash" %}
+                            <a href="{% url 'tickets:wash_ticket_detail' ticket.id %}"
+                                class="btn btn-sm btn-outline-secondary">
+                                Ver
+                            </a>
 
-                                        {% if ticket.status == "pending_payment" %}
-                                            <a
-                                                href="{% url 'tickets:charge_wash_ticket' ticket.id %}"
-                                                class="btn btn-sm btn-success"
-                                            >
-                                                Cobrar
-                                            </a>
-                                        {% endif %}
+                            {% if ticket.status == "pending_payment" %}
+                            <a href="{% url 'tickets:charge_wash_ticket' ticket.id %}" class="btn btn-sm btn-success">
+                                Cobrar
+                            </a>
+                            {% endif %}
 
-                                    {% elif ticket.ticket_type == "parking" %}
-                                        <a
-                                            href="{% url 'tickets:parking_ticket_detail' ticket.id %}"
-                                            class="btn btn-sm btn-outline-secondary"
-                                        >
-                                            Ver
-                                        </a>
+                            {% if ticket.status == "pending_payment" %}
+                            <a href="{% url 'tickets:cancel_ticket' ticket.id %}" class="btn btn-sm btn-outline-danger">
+                                Anular
+                            </a>
+                            {% endif %}
 
-                                        {% if ticket.status == "active" %}
-                                            <a
-                                                href="{% url 'tickets:charge_parking_ticket' ticket.id %}"
-                                                class="btn btn-sm btn-success"
-                                            >
-                                                Cobrar
-                                            </a>
-                                        {% endif %}
-                                    {% endif %}
-                                </td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
+                            {% elif ticket.ticket_type == "parking" %}
+                            <a href="{% url 'tickets:parking_ticket_detail' ticket.id %}"
+                                class="btn btn-sm btn-outline-secondary">
+                                Ver
+                            </a>
 
-                </table>
-            </div>
+                            {% if ticket.status == "active" %}
+                            <a href="{% url 'tickets:charge_parking_ticket' ticket.id %}"
+                                class="btn btn-sm btn-success">
+                                Cobrar
+                            </a>
+                            {% endif %}
+
+                            {% if ticket.status == "active" %}
+                            <a href="{% url 'tickets:cancel_ticket' ticket.id %}" class="btn btn-sm btn-outline-danger">
+                                Anular
+                            </a>
+                            {% endif %}
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+
+            </table>
+        </div>
         {% else %}
-            <div class="text-center py-5">
-                <h5 class="fw-bold">No se encontraron tickets</h5>
-                <p class="text-muted mb-3">
-                    Prueba cambiando los filtros o limpiando la búsqueda.
-                </p>
+        <div class="text-center py-5">
+            <h5 class="fw-bold">No se encontraron tickets</h5>
+            <p class="text-muted mb-3">
+                Prueba cambiando los filtros o limpiando la búsqueda.
+            </p>
 
-                <a href="{% url 'tickets:all_tickets' %}" class="btn btn-outline-secondary">
-                    Limpiar filtros
-                </a>
-            </div>
+            <a href="{% url 'tickets:all_tickets' %}" class="btn btn-outline-secondary">
+                Limpiar filtros
+            </a>
+        </div>
         {% endif %}
 
     </div>

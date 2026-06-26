@@ -200,3 +200,6 @@ class ChargeWithoutCodeForm(OtpAuthorizationForm):
             "placeholder": "Opcional",
         }),
     )
+
+class CancelTicketForm(OtpAuthorizationForm):
+    pass
