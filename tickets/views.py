@@ -48,7 +48,7 @@ def get_next_url(request, default_url_name="tickets:all_tickets"):
 def home(request):
     return render(request, "home.html")
 
-
+#Se crea el ticket de lavado
 @login_required
 @transaction.atomic
 def create_wash_ticket(request):
@@ -179,6 +179,7 @@ def create_wash_ticket(request):
         },
     )
 
+#Se crea el ticket de parking
 @login_required
 @transaction.atomic
 def create_parking_ticket(request):
@@ -290,6 +291,7 @@ def create_parking_ticket(request):
         },
     )
 
+#se ven detalles de ticket de parking
 @login_required
 def parking_ticket_detail(request, ticket_id):
     next_url = get_next_url(request)
@@ -314,37 +316,184 @@ def parking_ticket_detail(request, ticket_id):
         },
     )
 
+#detalles del ticket de lavado
 @login_required
-def active_parking_tickets(request):
-    tickets = (
-        Ticket.objects
-        .select_related("customer", "service", "cash_day", "created_by_employee")
-        .filter(
-            ticket_type=Ticket.PARKING,
-            status=Ticket.ACTIVE,
-        )
-        .order_by("-parking_entry_at")
+def wash_ticket_detail(request, ticket_id):
+    next_url = get_next_url(request)
+
+    ticket = get_object_or_404(
+        Ticket.objects.select_related(
+            "customer",
+            "service",
+            "cash_day",
+            "created_by_employee",
+            "updated_by_employee",
+        ).prefetch_related("ticket_extras"),
+        id=ticket_id,
     )
-
-    search_query = request.GET.get("q", "").strip()
-
-    if search_query:
-        tickets = tickets.filter(
-            models.Q(ticket_number__icontains=search_query)
-            | models.Q(vehicle_plate__icontains=search_query)
-            | models.Q(customer_name_snapshot__icontains=search_query)
-            | models.Q(customer_phone_snapshot__icontains=search_query)
-        )
 
     return render(
         request,
-        "tickets/active_parking_tickets.html",
+        "tickets/wash_ticket_detail.html",
         {
-            "tickets": tickets,
-            "search_query": search_query,
+            "ticket": ticket,
+            "next_url": next_url,
         },
     )
 
+# Cobro de lavado con código de cierre
+@login_required
+@transaction.atomic
+def charge_wash_ticket(request, ticket_id):
+    next_url = get_next_url(request)
+
+    ticket = get_object_or_404(
+        Ticket.objects.select_related(
+            "customer",
+            "service",
+            "cash_day",
+            "created_by_employee",
+        ).prefetch_related("ticket_extras"),
+        id=ticket_id,
+        ticket_type=Ticket.WASH,
+        status=Ticket.PENDING_PAYMENT,
+    )
+
+    if request.method == "POST":
+        form = ChargeWashTicketForm(request.POST)
+
+        if form.is_valid():
+            closing_code = form.cleaned_data["closing_code"].upper().strip()
+            payment_method = form.cleaned_data["payment_method"]
+            sinpe_reference = form.cleaned_data["sinpe_reference"].strip()
+
+            is_valid_code = check_password(
+                closing_code,
+                ticket.closing_code_hash,
+            )
+
+            if not is_valid_code:
+                messages.error(
+                    request,
+                    "El código de cierre no es correcto.",
+                )
+
+                AuditLog.objects.create(
+                    employee=request.user,
+                    ticket=ticket,
+                    action_type=AuditLog.CLOSE_WITHOUT_CODE,
+                    entity_type="Ticket",
+                    entity_id=ticket.id,
+                    old_values={
+                        "status": ticket.status,
+                    },
+                    new_values={
+                        "attempt": "invalid_closing_code",
+                    },
+                    reason="Intento fallido de cobro con código incorrecto",
+                )
+
+                return render(
+                    request,
+                    "tickets/charge_wash_ticket.html",
+                    {
+                        "ticket": ticket,
+                        "form": form,
+                        "next_url": next_url,
+                    },
+                )
+
+            if payment_method == Payment.SINPE and not sinpe_reference:
+                form.add_error(
+                    "sinpe_reference",
+                    "La referencia SINPE es recomendable para este método de pago.",
+                )
+
+                return render(
+                    request,
+                    "tickets/charge_wash_ticket.html",
+                    {
+                        "ticket": ticket,
+                        "form": form,
+                        "next_url": next_url,
+                    },
+                )
+
+            old_values = {
+                "status": ticket.status,
+                "paid_at": str(ticket.paid_at),
+                "ticket_cash_day": str(ticket.cash_day.business_date),
+                "payment": None,
+            }
+
+            payment_cash_day = get_or_create_today_cash_day_for_operation()
+
+            Payment.objects.create(
+                ticket=ticket,
+                cash_day=payment_cash_day,
+                received_by_employee=request.user,
+                payment_method=payment_method,
+                amount=ticket.total_with_tax,
+                sinpe_reference=sinpe_reference,
+            )
+            
+            ticket.cash_day = payment_cash_day
+            ticket.status = Ticket.PAID
+            ticket.paid_at = timezone.now()
+            ticket.updated_by_employee = request.user
+
+            ticket.save(
+                update_fields=[
+                    "cash_day",
+                    "status",
+                    "paid_at",
+                    "updated_by_employee",
+                    "updated_at",
+                ]
+            )
+
+            AuditLog.objects.create(
+                employee=request.user,
+                ticket=ticket,
+                action_type=AuditLog.CHARGE_WASH_TICKET,
+                entity_type="Ticket",
+                entity_id=ticket.id,
+                old_values=old_values,
+                new_values={
+                    "status": ticket.status,
+                    "paid_at": str(ticket.paid_at),
+                    "ticket_cash_day": str(ticket.cash_day.business_date),
+                    "payment": {
+                        "method": payment_method,
+                        "amount": str(ticket.total_with_tax),
+                        "sinpe_reference": sinpe_reference,
+                        "cash_day": str(payment_cash_day.business_date),
+                    },
+                },
+                reason="Ticket de lavado cobrado",
+            )
+
+            messages.success(
+                request,
+                f"Ticket {ticket.ticket_number} cobrado correctamente.",
+            )
+
+            return redirect(next_url)
+
+    else:
+        form = ChargeWashTicketForm()
+
+    return render(
+        request,
+        "tickets/charge_wash_ticket.html",
+        {
+            "ticket": ticket,
+            "form": form,
+            "next_url": next_url,
+        },
+    )
+
+#Cobro de parking con Codigo de cierre
 @login_required
 @transaction.atomic
 def charge_parking_ticket(request, ticket_id):
@@ -436,6 +585,7 @@ def charge_parking_ticket(request, ticket_id):
                 )
 
             old_values = {
+                "ticket_cash_day": str(ticket.cash_day.business_date),
                 "status": ticket.status,
                 "parking_exit_at": str(ticket.parking_exit_at),
                 "parking_minutes": ticket.parking_minutes,
@@ -443,15 +593,18 @@ def charge_parking_ticket(request, ticket_id):
                 "payment": None,
             }
 
+            payment_cash_day = get_or_create_today_cash_day_for_operation()
+
             Payment.objects.create(
                 ticket=ticket,
-                cash_day=ticket.cash_day,
+                cash_day=payment_cash_day,
                 received_by_employee=request.user,
                 payment_method=payment_method,
                 amount=parking_total,
                 sinpe_reference=sinpe_reference,
             )
 
+            ticket.cash_day = payment_cash_day
             ticket.status = Ticket.PAID
             ticket.parking_exit_at = exit_at
             ticket.parking_minutes = parking_minutes
@@ -463,6 +616,7 @@ def charge_parking_ticket(request, ticket_id):
 
             ticket.save(
                 update_fields=[
+                    "cash_day",
                     "status",
                     "parking_exit_at",
                     "parking_minutes",
@@ -484,6 +638,7 @@ def charge_parking_ticket(request, ticket_id):
                 old_values=old_values,
                 new_values={
                     "status": ticket.status,
+                    "ticket_cash_day": str(ticket.cash_day.business_date),
                     "parking_entry_at": str(ticket.parking_entry_at),
                     "parking_exit_at": str(ticket.parking_exit_at),
                     "parking_minutes": ticket.parking_minutes,
@@ -491,6 +646,7 @@ def charge_parking_ticket(request, ticket_id):
                         "method": payment_method,
                         "amount": str(parking_total),
                         "sinpe_reference": sinpe_reference,
+                        "cash_day": str(payment_cash_day.business_date),
                     },
                     "subtotal_without_tax": str(ticket.subtotal_without_tax),
                     "tax_amount": str(ticket.tax_amount),
@@ -523,289 +679,7 @@ def charge_parking_ticket(request, ticket_id):
         },
     )
 
-@login_required
-def wash_ticket_detail(request, ticket_id):
-    next_url = get_next_url(request)
-
-    ticket = get_object_or_404(
-        Ticket.objects.select_related(
-            "customer",
-            "service",
-            "cash_day",
-            "created_by_employee",
-            "updated_by_employee",
-        ).prefetch_related("ticket_extras"),
-        id=ticket_id,
-    )
-
-    return render(
-        request,
-        "tickets/wash_ticket_detail.html",
-        {
-            "ticket": ticket,
-            "next_url": next_url,
-        },
-    )
-
-@login_required
-def pending_wash_tickets(request):
-    tickets = (
-        Ticket.objects
-        .select_related("customer", "service", "cash_day", "created_by_employee")
-        .filter(
-            ticket_type=Ticket.WASH,
-            status=Ticket.PENDING_PAYMENT,
-        )
-        .order_by("-created_at")
-    )
-
-    search_query = request.GET.get("q", "").strip()
-
-    if search_query:
-        tickets = tickets.filter(
-            models.Q(ticket_number__icontains=search_query)
-            | models.Q(vehicle_plate__icontains=search_query)
-            | models.Q(customer_name_snapshot__icontains=search_query)
-            | models.Q(customer_phone_snapshot__icontains=search_query)
-        )
-
-    return render(
-        request,
-        "tickets/pending_wash_tickets.html",
-        {
-            "tickets": tickets,
-            "search_query": search_query,
-            
-        },
-    )
-
-@login_required
-@transaction.atomic
-def charge_wash_ticket(request, ticket_id):
-    next_url = get_next_url(request)
-    ticket = get_object_or_404(
-        Ticket.objects.select_related(
-            "customer",
-            "service",
-            "cash_day",
-            "created_by_employee",
-        ).prefetch_related("ticket_extras"),
-        id=ticket_id,
-        ticket_type=Ticket.WASH,
-        status=Ticket.PENDING_PAYMENT,
-    )
-
-    if request.method == "POST":
-        form = ChargeWashTicketForm(request.POST)
-
-        if form.is_valid():
-            closing_code = form.cleaned_data["closing_code"].upper().strip()
-            payment_method = form.cleaned_data["payment_method"]
-            sinpe_reference = form.cleaned_data["sinpe_reference"].strip()
-
-            is_valid_code = check_password(
-                closing_code,
-                ticket.closing_code_hash,
-            )
-
-            if not is_valid_code:
-                messages.error(
-                    request,
-                    "El código de cierre no es correcto.",
-                )
-
-                AuditLog.objects.create(
-                    employee=request.user,
-                    ticket=ticket,
-                    action_type=AuditLog.CLOSE_WITHOUT_CODE,
-                    entity_type="Ticket",
-                    entity_id=ticket.id,
-                    old_values={
-                        "status": ticket.status,
-                    },
-                    new_values={
-                        "attempt": "invalid_closing_code",
-                    },
-                    reason="Intento fallido de cobro con código incorrecto",
-                )
-
-                return render(
-                    request,
-                    "tickets/charge_wash_ticket.html",
-                    {
-                        "ticket": ticket,
-                        "form": form,
-                        "next_url": next_url,
-                    },
-                )
-
-            if payment_method == Payment.SINPE and not sinpe_reference:
-                form.add_error(
-                    "sinpe_reference",
-                    "La referencia SINPE es recomendable para este método de pago.",
-                )
-
-                return render(
-                    request,
-                    "tickets/charge_wash_ticket.html",
-                    {
-                        "ticket": ticket,
-                        "form": form,
-                        "next_url": next_url,
-                    },
-                )
-
-            old_values = {
-                "status": ticket.status,
-                "paid_at": str(ticket.paid_at),
-                "payment": None,
-            }
-
-            Payment.objects.create(
-                ticket=ticket,
-                cash_day=ticket.cash_day,
-                received_by_employee=request.user,
-                payment_method=payment_method,
-                amount=ticket.total_with_tax,
-                sinpe_reference=sinpe_reference,
-            )
-
-            ticket.status = Ticket.PAID
-            ticket.paid_at = timezone.now()
-            ticket.updated_by_employee = request.user
-            ticket.save(
-                update_fields=[
-                    "status",
-                    "paid_at",
-                    "updated_by_employee",
-                    "updated_at",
-                ]
-            )
-
-            AuditLog.objects.create(
-                employee=request.user,
-                ticket=ticket,
-                action_type=AuditLog.CHARGE_WASH_TICKET,
-                entity_type="Ticket",
-                entity_id=ticket.id,
-                old_values=old_values,
-                new_values={
-                    "status": ticket.status,
-                    "paid_at": str(ticket.paid_at),
-                    "payment": {
-                        "method": payment_method,
-                        "amount": str(ticket.total_with_tax),
-                        "sinpe_reference": sinpe_reference,
-                    },
-                },
-                reason="Ticket de lavado cobrado",
-            )
-
-            messages.success(
-                request,
-                f"Ticket {ticket.ticket_number} cobrado correctamente.",
-            )
-
-            return redirect(next_url)
-
-    else:
-        form = ChargeWashTicketForm()
-
-    return render(
-        request,
-        "tickets/charge_wash_ticket.html",
-        {
-            "ticket": ticket,
-            "form": form,
-            "next_url": next_url,
-        },
-    )
-
-
-@login_required
-def all_tickets(request):
-    date = request.GET.get("date", "").strip()
-    ticket_type = request.GET.get("ticket_type", "").strip()
-    status = request.GET.get("status", "").strip()
-    employee_id = request.GET.get("employee", "").strip()
-    time_from = request.GET.get("time_from", "").strip()
-    time_to = request.GET.get("time_to", "").strip()
-    search = request.GET.get("search", "").strip()
-
-    tickets = (
-        Ticket.objects
-        .select_related(
-            "customer",
-            "service",
-            "cash_day",
-            "created_by_employee",
-            "updated_by_employee",
-        )
-        .order_by("-created_at")
-    )
-
-    if date:
-        tickets = tickets.filter(
-            cash_day__business_date=date,
-        )
-
-    if ticket_type:
-        tickets = tickets.filter(
-            ticket_type=ticket_type,
-        )
-
-    if status:
-        tickets = tickets.filter(
-            status=status,
-        )
-
-    if employee_id:
-        tickets = tickets.filter(
-            created_by_employee_id=employee_id,
-        )
-
-    if time_from:
-        tickets = tickets.filter(
-            created_at__time__gte=time_from,
-        )
-
-    if time_to:
-        tickets = tickets.filter(
-            created_at__time__lte=time_to,
-        )
-
-    if search:
-        tickets = tickets.filter(
-            Q(ticket_number__icontains=search)
-            | Q(vehicle_plate__icontains=search)
-            | Q(customer_name_snapshot__icontains=search)
-            | Q(customer_phone_snapshot__icontains=search)
-        )
-
-    employees = Employee.objects.filter(
-        is_active=True,
-    ).order_by("username")
-
-    return render(
-        request,
-        "tickets/all_tickets.html",
-        {
-            "tickets": tickets[:100],
-            "date": date,
-            "ticket_type": ticket_type,
-            "status": status,
-            "employee_id": employee_id,
-            "time_from": time_from,
-            "time_to": time_to,
-            "search": search,
-            "employees": employees,
-            "ticket_type_choices": Ticket.TICKET_TYPE_CHOICES,
-            "status_choices": Ticket.STATUS_CHOICES,
-            "result_limit": 100,
-        },
-    )
-
-#cobro de lavado sin codigo OTP
+#cobro de lavado sin codigo de cierre
 @login_required
 @transaction.atomic
 def charge_wash_without_code(request, ticket_id):
@@ -889,23 +763,28 @@ def charge_wash_without_code(request, ticket_id):
             old_values = {
                 "status": ticket.status,
                 "paid_at": str(ticket.paid_at),
+                "ticket_cash_day": str(ticket.cash_day.business_date),
                 "payment": None,
             }
 
+            payment_cash_day = get_or_create_today_cash_day_for_operation()
+
             Payment.objects.create(
                 ticket=ticket,
-                cash_day=ticket.cash_day,
+                cash_day=payment_cash_day,
                 received_by_employee=request.user,
                 payment_method=payment_method,
                 amount=ticket.total_with_tax,
                 sinpe_reference=sinpe_reference,
             )
 
+            ticket.cash_day = payment_cash_day
             ticket.status = Ticket.PAID
             ticket.paid_at = timezone.now()
             ticket.updated_by_employee = request.user
             ticket.save(
                 update_fields=[
+                    "cash_day",
                     "status",
                     "paid_at",
                     "updated_by_employee",
@@ -924,10 +803,12 @@ def charge_wash_without_code(request, ticket_id):
                 new_values={
                     "status": ticket.status,
                     "paid_at": str(ticket.paid_at),
+                    "ticket_cash_day": str(ticket.cash_day.business_date),
                     "payment": {
                         "method": payment_method,
                         "amount": str(ticket.total_with_tax),
                         "sinpe_reference": sinpe_reference,
+                        "cash_day": str(payment_cash_day.business_date),
                     },
                     "authorized_by_employee": (
                         final_authorizer.username
@@ -962,7 +843,7 @@ def charge_wash_without_code(request, ticket_id):
         },
     )
 
-#cobro de parqueo sin otp
+#cobro de parqueo sin Codigo de cierre
 @login_required
 @transaction.atomic
 def charge_parking_without_code(request, ticket_id):
@@ -1079,18 +960,22 @@ def charge_parking_without_code(request, ticket_id):
                 "subtotal_without_tax": str(ticket.subtotal_without_tax),
                 "tax_amount": str(ticket.tax_amount),
                 "total_with_tax": str(ticket.total_with_tax),
+                "ticket_cash_day": str(ticket.cash_day.business_date),
                 "payment": None,
             }
 
+            payment_cash_day = get_or_create_today_cash_day_for_operation()
+
             Payment.objects.create(
                 ticket=ticket,
-                cash_day=ticket.cash_day,
+                cash_day=payment_cash_day,
                 received_by_employee=request.user,
                 payment_method=payment_method,
                 amount=parking_total,
                 sinpe_reference=sinpe_reference,
             )
 
+            ticket.cash_day = payment_cash_day
             ticket.status = Ticket.PAID
             ticket.parking_exit_at = exit_at
             ticket.parking_minutes = parking_minutes
@@ -1102,6 +987,7 @@ def charge_parking_without_code(request, ticket_id):
 
             ticket.save(
                 update_fields=[
+                    "cash_day",
                     "status",
                     "parking_exit_at",
                     "parking_minutes",
@@ -1124,6 +1010,7 @@ def charge_parking_without_code(request, ticket_id):
                 old_values=old_values,
                 new_values={
                     "status": ticket.status,
+                    "ticket_cash_day": str(ticket.cash_day.business_date),
                     "parking_entry_at": str(ticket.parking_entry_at),
                     "parking_exit_at": str(ticket.parking_exit_at),
                     "parking_minutes": ticket.parking_minutes,
@@ -1131,6 +1018,7 @@ def charge_parking_without_code(request, ticket_id):
                         "method": payment_method,
                         "amount": str(parking_total),
                         "sinpe_reference": sinpe_reference,
+                        "cash_day": str(payment_cash_day.business_date),
                     },
                     "subtotal_without_tax": str(ticket.subtotal_without_tax),
                     "tax_amount": str(ticket.tax_amount),
@@ -1150,7 +1038,7 @@ def charge_parking_without_code(request, ticket_id):
                 f"Ticket de parqueo {ticket.ticket_number} cobrado sin código correctamente.",
             )
 
-            return redirect("tickets:parking_ticket_detail", ticket_id=ticket.id)
+            return redirect(next_url)
 
     else:
         form = ChargeWithoutCodeForm(
@@ -1172,7 +1060,91 @@ def charge_parking_without_code(request, ticket_id):
         },
     )
 
+# para ver todos los tickets
+@login_required
+def all_tickets(request):
+    date = request.GET.get("date", "").strip()
+    ticket_type = request.GET.get("ticket_type", "").strip()
+    status = request.GET.get("status", "").strip()
+    employee_id = request.GET.get("employee", "").strip()
+    time_from = request.GET.get("time_from", "").strip()
+    time_to = request.GET.get("time_to", "").strip()
+    search = request.GET.get("search", "").strip()
 
+    tickets = (
+        Ticket.objects
+        .select_related(
+            "customer",
+            "service",
+            "cash_day",
+            "created_by_employee",
+            "updated_by_employee",
+        )
+        .order_by("-created_at")
+    )
+
+    if date:
+        tickets = tickets.filter(
+            cash_day__business_date=date,
+        )
+
+    if ticket_type:
+        tickets = tickets.filter(
+            ticket_type=ticket_type,
+        )
+
+    if status:
+        tickets = tickets.filter(
+            status=status,
+        )
+
+    if employee_id:
+        tickets = tickets.filter(
+            created_by_employee_id=employee_id,
+        )
+
+    if time_from:
+        tickets = tickets.filter(
+            created_at__time__gte=time_from,
+        )
+
+    if time_to:
+        tickets = tickets.filter(
+            created_at__time__lte=time_to,
+        )
+
+    if search:
+        tickets = tickets.filter(
+            Q(ticket_number__icontains=search)
+            | Q(vehicle_plate__icontains=search)
+            | Q(customer_name_snapshot__icontains=search)
+            | Q(customer_phone_snapshot__icontains=search)
+        )
+
+    employees = Employee.objects.filter(
+        is_active=True,
+    ).order_by("username")
+
+    return render(
+        request,
+        "tickets/all_tickets.html",
+        {
+            "tickets": tickets[:100],
+            "date": date,
+            "ticket_type": ticket_type,
+            "status": status,
+            "employee_id": employee_id,
+            "time_from": time_from,
+            "time_to": time_to,
+            "search": search,
+            "employees": employees,
+            "ticket_type_choices": Ticket.TICKET_TYPE_CHOICES,
+            "status_choices": Ticket.STATUS_CHOICES,
+            "result_limit": 100,
+        },
+    )
+
+#se cancelan tickets
 @login_required
 @transaction.atomic
 def cancel_ticket(request, ticket_id):
@@ -1327,6 +1299,7 @@ def cancel_ticket(request, ticket_id):
         },
     )
 
+#se imprime por primera vez
 @login_required
 @transaction.atomic
 def print_ticket(request, ticket_id):
@@ -1392,6 +1365,7 @@ def print_ticket(request, ticket_id):
         },
     )
 
+# reimprimir tickets despues de 1ra vez
 @login_required
 @transaction.atomic
 def reprint_ticket(request, ticket_id):
@@ -1553,7 +1527,7 @@ def reprint_ticket(request, ticket_id):
         },
     )
 
-
+#editar tickets de lavado
 @login_required
 @transaction.atomic
 def edit_wash_ticket(request, ticket_id):
@@ -1807,6 +1781,7 @@ def edit_wash_ticket(request, ticket_id):
         },
     )
 
+#editar tickets de parking
 @login_required
 @transaction.atomic
 def edit_parking_ticket(request, ticket_id):
@@ -1980,6 +1955,7 @@ def edit_parking_ticket(request, ticket_id):
         },
     )
 
+#se aplica descuento
 @login_required
 @transaction.atomic
 def apply_discount(request, ticket_id):

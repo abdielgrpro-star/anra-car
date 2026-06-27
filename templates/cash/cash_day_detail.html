@@ -123,9 +123,9 @@
             <div class="card-body">
                 <small class="text-muted">Primer ticket del día</small>
 
-                {% if first_ticket %}
-                <div class="fw-bold">{{ first_ticket.ticket_number }}</div>
-                <div class="text-muted">{{ first_ticket.created_at|date:"d/m/Y H:i" }}</div>
+                {% if first_payment %}
+                <div class="fw-bold">{{ first_payment.ticket.ticket_number }}</div>
+                <div class="text-muted">{{ first_payment.created_at|date:"d/m/Y H:i" }}</div>
                 {% else %}
                 <div class="text-muted">No hay tickets todavía.</div>
                 {% endif %}
@@ -138,9 +138,9 @@
             <div class="card-body">
                 <small class="text-muted">Último ticket del día</small>
 
-                {% if last_ticket %}
-                <div class="fw-bold">{{ last_ticket.ticket_number }}</div>
-                <div class="text-muted">{{ last_ticket.created_at|date:"d/m/Y H:i" }}</div>
+                {% if last_payment %}
+                <div class="fw-bold">{{ last_payment.ticket.ticket_number }}</div>
+                <div class="text-muted">{{ last_payment.created_at|date:"d/m/Y H:i" }}</div>
                 {% else %}
                 <div class="text-muted">No hay tickets todavía.</div>
                 {% endif %}

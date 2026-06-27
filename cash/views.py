@@ -18,7 +18,6 @@ def cash_day_detail(request):
             "No tiene permisos para ver la caja del día.",
         )
         return redirect("home")
-    today = timezone.localdate()
 
     cash_day = get_today_cash_day_for_view()
 
@@ -58,8 +57,8 @@ def cash_day_detail(request):
     active_tickets_count = tickets_today.filter(status=Ticket.ACTIVE).count()
     cancelled_tickets_count = tickets_today.filter(status=Ticket.CANCELLED).count()
 
-    first_ticket = tickets_today.order_by("created_at").first()
-    last_ticket = tickets_today.order_by("-created_at").first()
+    first_payment = payments.order_by("created_at").first()
+    last_payment = payments.order_by("-created_at").first()
 
     return render(
         request,
@@ -75,8 +74,8 @@ def cash_day_detail(request):
             "pending_tickets_count": pending_tickets_count,
             "active_tickets_count": active_tickets_count,
             "cancelled_tickets_count": cancelled_tickets_count,
-            "first_ticket": first_ticket,
-            "last_ticket": last_ticket,
+            "first_payment": first_payment,
+            "last_payment": last_payment,
         },
     )
 
