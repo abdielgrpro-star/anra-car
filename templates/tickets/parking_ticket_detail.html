@@ -6,37 +6,6 @@
 
 <div class="row justify-content-center">
     <div class="col-lg-6">
-
-        <div class="d-flex justify-content-between align-items-center mb-3 no-print">
-            <a href="{% url 'tickets:create_parking_ticket' %}" class="btn btn-outline-secondary">
-                Crear otro
-            </a>
-
-            <div class="d-flex gap-2">
-                {% if ticket.status == "active" %}
-                <a href="{% url 'tickets:edit_parking_ticket' ticket.id %}" class="btn btn-warning">
-                    Editar
-                </a>
-
-
-                <a href="{% url 'tickets:apply_discount' ticket.id %}" class="btn btn-warning">
-                    Aplicar descuento
-                </a>
-
-
-                <a href="{% url 'tickets:charge_parking_ticket' ticket.id %}" class="btn btn-success">
-                    Cobrar
-                </a>
-                {% endif %}
-
-                <a href="{% url 'tickets:reprint_ticket' ticket.id %}" class="btn btn-primary">
-                    {% if ticket.print_count == 0 %}
-                    Imprimir ticket
-                    {% else %}
-                    Reimprimir ticket
-                    {% endif %}
-                </a>
-            </div>
         </div>
 
         <div class="card shadow-sm border-0">
@@ -45,7 +14,9 @@
                 <div class="text-center mb-3">
                     <h2 class="h4 fw-bold mb-0">ANRACAR</h2>
                     <p class="text-muted mb-0">Ticket de parqueo</p>
+                    
                 </div>
+
 
                 <hr>
 
@@ -150,7 +121,9 @@
                 <div class="text-center">
                     <p class="mb-1">
                         <strong>Código de cierre del ticket</strong>
+                        
                     </p>
+                    
 
                     {% if closing_code %}
                     <div class="fs-4 fw-bold border rounded p-2 bg-light">
@@ -161,6 +134,11 @@
                         El código solo se muestra al crear el ticket.
                     </div>
                     {% endif %}
+                    <div class="fs-4 fw-bold border rounded p-2 bg-light">
+                                    <a href="{{ next_url }}" class="btn btn-outline-secondary">
+                    ← Ir a tickets
+            </a>
+                    </div>
                 </div>
 
                 <hr>

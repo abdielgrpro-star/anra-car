@@ -9,12 +9,12 @@
 
         <div class="d-flex justify-content-between align-items-center mb-3 no-print">
             {% if ticket.ticket_type == "wash" %}
-            <a href="{% url 'tickets:wash_ticket_detail' ticket.id %}" class="btn btn-outline-secondary">
-                Volver
+            <a href="{{ next_url }}" class="btn btn-outline-secondary no-print">
+                ← Ir a tickets
             </a>
             {% elif ticket.ticket_type == "parking" %}
-            <a href="{% url 'tickets:parking_ticket_detail' ticket.id %}" class="btn btn-outline-secondary">
-                Volver
+            <a href="{{ next_url }}" class="btn btn-outline-secondary no-print">
+                ← Ir a tickets
             </a>
             {% endif %}
 

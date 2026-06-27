@@ -9,21 +9,18 @@
 
         <div class="d-flex justify-content-between align-items-center mb-3">
             <div>
-                <h1 class="h3 fw-bold mb-1">Aplicar descuento</h1>
+                <h1 class="h3 fw-bold mb-1">
+                    {% if ticket.discount_amount > 0 %}
+                    Editar descuento
+                    {% else %}
+                    Aplicar descuento
+                    {% endif %}
+                </h1>
                 <p class="text-muted mb-0">
                     Ticket {{ ticket.ticket_number }} — {{ ticket.vehicle_plate }}
                 </p>
             </div>
 
-            {% if ticket.ticket_type == "wash" %}
-                <a href="{% url 'tickets:wash_ticket_detail' ticket.id %}" class="btn btn-outline-secondary">
-                    Volver
-                </a>
-            {% else %}
-                <a href="{% url 'tickets:parking_ticket_detail' ticket.id %}" class="btn btn-outline-secondary">
-                    Volver
-                </a>
-            {% endif %}
         </div>
 
         <div class="alert alert-warning">
@@ -59,6 +56,7 @@
 
         <form method="post" class="card shadow-sm border-0">
             {% csrf_token %}
+            <input type="hidden" name="next" value="{{ next_url }}">
 
             <div class="card-body">
 
@@ -69,28 +67,41 @@
                     {{ form.discount_amount }}
                     {{ form.discount_amount.errors }}
                     <div class="form-text">
-                        Ingrese el monto del descuento en colones.
+                        Ingrese el monto del descuento en colones. Para eliminarlo, puede escribir 0.
                     </div>
                 </div>
+
+                {% if ticket.discount_amount > 0 %}
+                <div class="form-check mb-3">
+                    {{ form.remove_discount }}
+                    <label class="form-check-label" for="{{ form.remove_discount.id_for_label }}">
+                        {{ form.remove_discount.label }}
+                    </label>
+                    <div class="form-text">
+                        Marque esta opción para dejar el descuento en ₡0.
+                    </div>
+                    {{ form.remove_discount.errors }}
+                </div>
+                {% endif %}
 
                 <hr>
 
                 <h5 class="card-title mb-3">Autorización</h5>
 
                 {% if form.authorized_by_employee %}
-                    <div class="mb-3">
-                        <label class="form-label">{{ form.authorized_by_employee.label }}</label>
-                        {{ form.authorized_by_employee }}
-                        {{ form.authorized_by_employee.errors }}
-                    </div>
+                <div class="mb-3">
+                    <label class="form-label">{{ form.authorized_by_employee.label }}</label>
+                    {{ form.authorized_by_employee }}
+                    {{ form.authorized_by_employee.errors }}
+                </div>
                 {% endif %}
 
                 {% if form.otp_code %}
-                    <div class="mb-3">
-                        <label class="form-label">{{ form.otp_code.label }}</label>
-                        {{ form.otp_code }}
-                        {{ form.otp_code.errors }}
-                    </div>
+                <div class="mb-3">
+                    <label class="form-label">{{ form.otp_code.label }}</label>
+                    {{ form.otp_code }}
+                    {{ form.otp_code.errors }}
+                </div>
                 {% endif %}
 
                 <div class="mb-3">
@@ -106,17 +117,21 @@
 
             <div class="card-footer bg-white d-flex justify-content-end gap-2">
                 {% if ticket.ticket_type == "wash" %}
-                    <a href="{% url 'tickets:wash_ticket_detail' ticket.id %}" class="btn btn-outline-secondary">
-                        Cancelar
-                    </a>
+                <a href="{{ next_url }}" class="btn btn-outline-secondary">
+                    ← Ir a tickets
+                </a>
                 {% else %}
-                    <a href="{% url 'tickets:parking_ticket_detail' ticket.id %}" class="btn btn-outline-secondary">
-                        Cancelar
-                    </a>
+                <a href="{{ next_url }}" class="btn btn-outline-secondary">
+                    ← Ir a tickets
+                </a>
                 {% endif %}
 
                 <button type="submit" class="btn btn-warning">
+                    {% if ticket.discount_amount > 0 %}
+                    Guardar cambio
+                    {% else %}
                     Aplicar descuento
+                    {% endif %}
                 </button>
             </div>
         </form>

@@ -50,6 +50,7 @@ class OtpAuthorizationForm(forms.Form):
         if self.requires_otp:
             self.fields["authorized_by_employee"].required = True
             self.fields["otp_code"].required = True
+            self.fields["reason"].required = True
 
             self.fields["authorized_by_employee"].queryset = Employee.objects.filter(
                 is_active=True,
@@ -62,3 +63,8 @@ class OtpAuthorizationForm(forms.Form):
         else:
             self.fields.pop("authorized_by_employee")
             self.fields.pop("otp_code")
+
+            self.fields["reason"].required = False
+            self.fields["reason"].widget.attrs["placeholder"] = (
+                "Motivo opcional para dejar registro en auditoría"
+            )

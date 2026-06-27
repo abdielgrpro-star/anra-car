@@ -88,7 +88,7 @@ def audit_log_list(request):
         request,
         "audit/audit_log_list.html",
         {
-            "logs": logs[:300],
+            "logs": logs[:150],
             "employees": employees,
             "action_choices": AuditLog.ACTION_TYPE_CHOICES,
             "date_from": date_from,
@@ -97,5 +97,6 @@ def audit_log_list(request):
             "action_type": action_type,
             "otp_status": otp_status,
             "search": search,
+            "result_limit": 150,
         },
     )

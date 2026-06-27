@@ -4,15 +4,17 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.hashers import make_password, check_password
 from django.db import models, transaction
+from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.urls import reverse
 
 from audit.models import AuditLog, OtpUsage
 from audit.utils import validate_sensitive_action_authorization
-from cash.models import CashDay
 from cash.services import get_or_create_today_cash_day_for_operation
 from catalog.models import Service
 from payments.models import Payment
+from accounts.models import Employee
 from tickets.forms import (
     ApplyDiscountForm,
     CancelTicketForm,
@@ -32,6 +34,15 @@ from tickets.utils import (
     generate_closing_code,
     generate_ticket_number,
 )
+
+
+def get_next_url(request, default_url_name="tickets:all_tickets"):
+    next_url = request.GET.get("next") or request.POST.get("next")
+
+    if next_url:
+        return next_url
+
+    return reverse(default_url_name)
 
 @login_required
 def home(request):
@@ -281,25 +292,25 @@ def create_parking_ticket(request):
 
 @login_required
 def parking_ticket_detail(request, ticket_id):
+    next_url = get_next_url(request)
+
     ticket = get_object_or_404(
         Ticket.objects.select_related(
             "customer",
             "service",
             "cash_day",
             "created_by_employee",
+            "updated_by_employee",
         ),
         id=ticket_id,
-        ticket_type=Ticket.PARKING,
     )
-
-    closing_code = request.session.pop("last_closing_code", None)
 
     return render(
         request,
         "tickets/parking_ticket_detail.html",
         {
             "ticket": ticket,
-            "closing_code": closing_code,
+            "next_url": next_url,
         },
     )
 
@@ -337,6 +348,7 @@ def active_parking_tickets(request):
 @login_required
 @transaction.atomic
 def charge_parking_ticket(request, ticket_id):
+    next_url = get_next_url(request)
     ticket = get_object_or_404(
         Ticket.objects.select_related(
             "customer",
@@ -419,6 +431,7 @@ def charge_parking_ticket(request, ticket_id):
                         "parking_minutes": parking_minutes,
                         "parking_total": parking_total,
                         "tax_data": tax_data,
+                        "next_url": next_url,
                     },
                 )
 
@@ -491,7 +504,7 @@ def charge_parking_ticket(request, ticket_id):
                 f"Ticket de parqueo {ticket.ticket_number} cobrado correctamente.",
             )
 
-            return redirect("tickets:parking_ticket_detail", ticket_id=ticket.id)
+            return redirect(next_url)
 
     else:
         form = ChargeParkingTicketForm()
@@ -506,30 +519,31 @@ def charge_parking_ticket(request, ticket_id):
             "parking_minutes": parking_minutes,
             "parking_total": parking_total,
             "tax_data": tax_data,
+            "next_url": next_url,
         },
     )
 
 @login_required
 def wash_ticket_detail(request, ticket_id):
+    next_url = get_next_url(request)
+
     ticket = get_object_or_404(
         Ticket.objects.select_related(
             "customer",
             "service",
             "cash_day",
             "created_by_employee",
+            "updated_by_employee",
         ).prefetch_related("ticket_extras"),
         id=ticket_id,
-        ticket_type=Ticket.WASH,
     )
-
-    closing_code = request.session.pop("last_closing_code", None)
 
     return render(
         request,
         "tickets/wash_ticket_detail.html",
         {
             "ticket": ticket,
-            "closing_code": closing_code,
+            "next_url": next_url,
         },
     )
 
@@ -561,12 +575,14 @@ def pending_wash_tickets(request):
         {
             "tickets": tickets,
             "search_query": search_query,
+            
         },
     )
 
 @login_required
 @transaction.atomic
 def charge_wash_ticket(request, ticket_id):
+    next_url = get_next_url(request)
     ticket = get_object_or_404(
         Ticket.objects.select_related(
             "customer",
@@ -619,6 +635,7 @@ def charge_wash_ticket(request, ticket_id):
                     {
                         "ticket": ticket,
                         "form": form,
+                        "next_url": next_url,
                     },
                 )
 
@@ -634,6 +651,7 @@ def charge_wash_ticket(request, ticket_id):
                     {
                         "ticket": ticket,
                         "form": form,
+                        "next_url": next_url,
                     },
                 )
 
@@ -688,7 +706,7 @@ def charge_wash_ticket(request, ticket_id):
                 f"Ticket {ticket.ticket_number} cobrado correctamente.",
             )
 
-            return redirect("tickets:wash_ticket_detail", ticket_id=ticket.id)
+            return redirect(next_url)
 
     else:
         form = ChargeWashTicketForm()
@@ -699,12 +717,21 @@ def charge_wash_ticket(request, ticket_id):
         {
             "ticket": ticket,
             "form": form,
+            "next_url": next_url,
         },
     )
 
 
 @login_required
 def all_tickets(request):
+    date = request.GET.get("date", "").strip()
+    ticket_type = request.GET.get("ticket_type", "").strip()
+    status = request.GET.get("status", "").strip()
+    employee_id = request.GET.get("employee", "").strip()
+    time_from = request.GET.get("time_from", "").strip()
+    time_to = request.GET.get("time_to", "").strip()
+    search = request.GET.get("search", "").strip()
+
     tickets = (
         Ticket.objects
         .select_related(
@@ -717,45 +744,64 @@ def all_tickets(request):
         .order_by("-created_at")
     )
 
-    search_query = request.GET.get("q", "").strip()
-    date_query = request.GET.get("date", "").strip()
-    ticket_type = request.GET.get("ticket_type", "").strip()
-    status = request.GET.get("status", "").strip()
-
-    if search_query:
+    if date:
         tickets = tickets.filter(
-            models.Q(ticket_number__icontains=search_query)
-            | models.Q(vehicle_plate__icontains=search_query)
-            | models.Q(customer_name_snapshot__icontains=search_query)
-            | models.Q(customer_phone_snapshot__icontains=search_query)
-        )
-
-    if date_query:
-        tickets = tickets.filter(
-            cash_day__business_date=date_query
+            cash_day__business_date=date,
         )
 
     if ticket_type:
         tickets = tickets.filter(
-            ticket_type=ticket_type
+            ticket_type=ticket_type,
         )
 
     if status:
         tickets = tickets.filter(
-            status=status
+            status=status,
         )
+
+    if employee_id:
+        tickets = tickets.filter(
+            created_by_employee_id=employee_id,
+        )
+
+    if time_from:
+        tickets = tickets.filter(
+            created_at__time__gte=time_from,
+        )
+
+    if time_to:
+        tickets = tickets.filter(
+            created_at__time__lte=time_to,
+        )
+
+    if search:
+        tickets = tickets.filter(
+            Q(ticket_number__icontains=search)
+            | Q(vehicle_plate__icontains=search)
+            | Q(customer_name_snapshot__icontains=search)
+            | Q(customer_phone_snapshot__icontains=search)
+        )
+
+    employees = Employee.objects.filter(
+        is_active=True,
+    ).order_by("username")
 
     return render(
         request,
         "tickets/all_tickets.html",
         {
-            "tickets": tickets,
-            "search_query": search_query,
-            "date_query": date_query,
+            "tickets": tickets[:100],
+            "date": date,
             "ticket_type": ticket_type,
             "status": status,
+            "employee_id": employee_id,
+            "time_from": time_from,
+            "time_to": time_to,
+            "search": search,
+            "employees": employees,
             "ticket_type_choices": Ticket.TICKET_TYPE_CHOICES,
             "status_choices": Ticket.STATUS_CHOICES,
+            "result_limit": 100,
         },
     )
 
@@ -763,6 +809,7 @@ def all_tickets(request):
 @login_required
 @transaction.atomic
 def charge_wash_without_code(request, ticket_id):
+    next_url = get_next_url(request)
     ticket = get_object_or_404(
         Ticket.objects.select_related(
             "customer",
@@ -835,6 +882,7 @@ def charge_wash_without_code(request, ticket_id):
                         "ticket": ticket,
                         "form": form,
                         "ticket_kind": "lavado",
+                        "next_url": next_url,
                     },
                 )
 
@@ -896,7 +944,7 @@ def charge_wash_without_code(request, ticket_id):
                 f"Ticket {ticket.ticket_number} cobrado sin código correctamente.",
             )
 
-            return redirect("tickets:wash_ticket_detail", ticket_id=ticket.id)
+            return redirect(next_url)
 
     else:
         form = ChargeWithoutCodeForm(
@@ -910,6 +958,7 @@ def charge_wash_without_code(request, ticket_id):
             "ticket": ticket,
             "form": form,
             "ticket_kind": "lavado",
+            "next_url": next_url,
         },
     )
 
@@ -917,6 +966,7 @@ def charge_wash_without_code(request, ticket_id):
 @login_required
 @transaction.atomic
 def charge_parking_without_code(request, ticket_id):
+    next_url = get_next_url(request)
     ticket = get_object_or_404(
         Ticket.objects.select_related(
             "customer",
@@ -1018,6 +1068,7 @@ def charge_parking_without_code(request, ticket_id):
                         "parking_minutes": parking_minutes,
                         "parking_total": parking_total,
                         "tax_data": tax_data,
+                        "next_url": next_url,
                     },
                 )
 
@@ -1117,6 +1168,7 @@ def charge_parking_without_code(request, ticket_id):
             "parking_minutes": parking_minutes,
             "parking_total": parking_total,
             "tax_data": tax_data,
+            "next_url": next_url,
         },
     )
 
@@ -1124,6 +1176,7 @@ def charge_parking_without_code(request, ticket_id):
 @login_required
 @transaction.atomic
 def cancel_ticket(request, ticket_id):
+    next_url = get_next_url(request)
     ticket = get_object_or_404(
         Ticket.objects.select_related(
             "customer",
@@ -1198,6 +1251,7 @@ def cancel_ticket(request, ticket_id):
                     {
                         "ticket": ticket,
                         "form": form,
+                        "next_url": next_url,
                     },
                 )
 
@@ -1251,12 +1305,12 @@ def cancel_ticket(request, ticket_id):
             )
 
             if ticket.ticket_type == Ticket.WASH:
-                return redirect("tickets:pending_wash_tickets")
+                return redirect(next_url)
 
             if ticket.ticket_type == Ticket.PARKING:
-                return redirect("tickets:active_parking_tickets")
+                return redirect(next_url)
 
-            return redirect("tickets:all_tickets")
+            return redirect(next_url)
 
     else:
         form = CancelTicketForm(
@@ -1269,12 +1323,14 @@ def cancel_ticket(request, ticket_id):
         {
             "ticket": ticket,
             "form": form,
+            "next_url": next_url,
         },
     )
 
 @login_required
 @transaction.atomic
 def print_ticket(request, ticket_id):
+    next_url = get_next_url(request)
     ticket = get_object_or_404(
         Ticket.objects.select_related(
             "customer",
@@ -1332,12 +1388,14 @@ def print_ticket(request, ticket_id):
         "tickets/print_ticket.html",
         {
             "ticket": ticket,
+            "next_url": next_url,
         },
     )
 
 @login_required
 @transaction.atomic
 def reprint_ticket(request, ticket_id):
+    next_url = get_next_url(request)
     ticket = get_object_or_404(
         Ticket.objects.select_related(
             "customer",
@@ -1415,6 +1473,7 @@ def reprint_ticket(request, ticket_id):
                     {
                         "ticket": ticket,
                         "form": form,
+                        "next_url": next_url,
                     },
                 )
 
@@ -1475,6 +1534,7 @@ def reprint_ticket(request, ticket_id):
                 "tickets/print_ticket.html",
                 {
                     "ticket": ticket,
+                    "next_url": next_url,
                 },
             )
 
@@ -1489,6 +1549,7 @@ def reprint_ticket(request, ticket_id):
         {
             "ticket": ticket,
             "form": form,
+            "next_url": next_url,
         },
     )
 
@@ -1496,6 +1557,7 @@ def reprint_ticket(request, ticket_id):
 @login_required
 @transaction.atomic
 def edit_wash_ticket(request, ticket_id):
+    next_url = get_next_url(request)
     ticket = get_object_or_404(
         Ticket.objects.select_related(
             "customer",
@@ -1571,6 +1633,7 @@ def edit_wash_ticket(request, ticket_id):
                     {
                         "ticket": ticket,
                         "form": form,
+                        "next_url": next_url,
                     },
                 )
 
@@ -1726,7 +1789,7 @@ def edit_wash_ticket(request, ticket_id):
                 f"Ticket {ticket.ticket_number} editado correctamente.",
             )
 
-            return redirect("tickets:wash_ticket_detail", ticket_id=ticket.id)
+            return redirect(next_url)
 
     else:
         form = EditWashTicketForm(
@@ -1740,12 +1803,14 @@ def edit_wash_ticket(request, ticket_id):
         {
             "ticket": ticket,
             "form": form,
+            "next_url": next_url,
         },
     )
 
 @login_required
 @transaction.atomic
 def edit_parking_ticket(request, ticket_id):
+    next_url = get_next_url(request)
     ticket = get_object_or_404(
         Ticket.objects.select_related(
             "customer",
@@ -1822,6 +1887,7 @@ def edit_parking_ticket(request, ticket_id):
                     {
                         "ticket": ticket,
                         "form": form,
+                        "next_url": next_url,
                     },
                 )
 
@@ -1896,7 +1962,7 @@ def edit_parking_ticket(request, ticket_id):
                 f"Ticket de parqueo {ticket.ticket_number} editado correctamente.",
             )
 
-            return redirect("tickets:parking_ticket_detail", ticket_id=ticket.id)
+            return redirect(next_url)
 
     else:
         form = EditParkingTicketForm(
@@ -1910,12 +1976,16 @@ def edit_parking_ticket(request, ticket_id):
         {
             "ticket": ticket,
             "form": form,
+            "next_url": next_url,
         },
     )
 
 @login_required
 @transaction.atomic
 def apply_discount(request, ticket_id):
+    next_url = get_next_url(request)
+
+
     ticket = get_object_or_404(
         Ticket.objects.select_related(
             "customer",
@@ -1933,9 +2003,9 @@ def apply_discount(request, ticket_id):
         )
 
         if ticket.ticket_type == Ticket.WASH:
-            return redirect("tickets:wash_ticket_detail", ticket_id=ticket.id)
+            return redirect(next_url)
 
-        return redirect("tickets:parking_ticket_detail", ticket_id=ticket.id)
+        return redirect(next_url)
 
     if request.method == "POST":
         form = ApplyDiscountForm(
@@ -1953,6 +2023,10 @@ def apply_discount(request, ticket_id):
             otp_code = form.cleaned_data.get("otp_code")
 
             discount_amount = form.cleaned_data["discount_amount"]
+            remove_discount = form.cleaned_data.get("remove_discount", False)
+
+            if remove_discount:
+                discount_amount = Decimal("0.00")
 
             is_authorized, otp_usage, final_authorizer = validate_sensitive_action_authorization(
                 used_by_employee=request.user,
@@ -1966,7 +2040,7 @@ def apply_discount(request, ticket_id):
             if not is_authorized:
                 messages.error(
                     request,
-                    "El OTP ingresado no es correcto.",
+                    "El OTP ingresado no es correcto. Verifique el código con el administrador e inténtelo nuevamente.",
                 )
 
                 AuditLog.objects.create(
@@ -1997,6 +2071,7 @@ def apply_discount(request, ticket_id):
                     {
                         "ticket": ticket,
                         "form": form,
+                        "next_url": next_url,
                     },
                 )
 
@@ -2025,6 +2100,7 @@ def apply_discount(request, ticket_id):
                         {
                             "ticket": ticket,
                             "form": form,
+                            "next_url": next_url,
                         },
                     )
 
@@ -2065,6 +2141,7 @@ def apply_discount(request, ticket_id):
                         {
                             "ticket": ticket,
                             "form": form,
+                            "next_url": next_url,
                         },
                     )
 
@@ -2079,38 +2156,45 @@ def apply_discount(request, ticket_id):
                     ]
                 )
 
-            AuditLog.objects.create(
-                employee=request.user,
-                ticket=ticket,
-                otp_usage=otp_usage,
-                action_type=AuditLog.APPLY_DISCOUNT,
-                entity_type="Ticket",
-                entity_id=ticket.id,
-                old_values=old_values,
-                new_values={
-                    "discount_amount": str(ticket.discount_amount),
-                    "subtotal_without_tax": str(ticket.subtotal_without_tax),
-                    "tax_amount": str(ticket.tax_amount),
-                    "total_with_tax": str(ticket.total_with_tax),
-                    "authorized_by_employee": (
-                        final_authorizer.username
-                        if final_authorizer
-                        else None
-                    ),
-                    "used_otp": otp_usage is not None,
-                },
-                reason=reason,
-            )
+                AuditLog.objects.create(
+                    employee=request.user,
+                    ticket=ticket,
+                    otp_usage=otp_usage,
+                    action_type=AuditLog.APPLY_DISCOUNT,
+                    entity_type="Ticket",
+                    entity_id=ticket.id,
+                    old_values=old_values,
+                    new_values={
+                        "discount_amount": str(ticket.discount_amount),
+                        "subtotal_without_tax": str(ticket.subtotal_without_tax),
+                        "tax_amount": str(ticket.tax_amount),
+                        "total_with_tax": str(ticket.total_with_tax),
+                        "remove_discount": remove_discount,
+                        "authorized_by_employee": (
+                            final_authorizer.username
+                            if final_authorizer
+                            else None
+                        ),
+                        "used_otp": otp_usage is not None,
+                    },
+                    reason=reason,
+                )
 
-            messages.success(
-                request,
-                f"Descuento aplicado correctamente al ticket {ticket.ticket_number}.",
-            )
+            if discount_amount == Decimal("0.00"):
+                messages.success(
+                    request,
+                    f"Descuento eliminado correctamente del ticket {ticket.ticket_number}.",
+                )
+            else:
+                messages.success(
+                    request,
+                    f"Descuento actualizado correctamente en el ticket {ticket.ticket_number}.",
+                )
 
             if ticket.ticket_type == Ticket.WASH:
-                return redirect("tickets:wash_ticket_detail", ticket_id=ticket.id)
+                return redirect(next_url)
 
-            return redirect("tickets:parking_ticket_detail", ticket_id=ticket.id)
+            return redirect(next_url)
 
     else:
         form = ApplyDiscountForm(
@@ -2124,5 +2208,6 @@ def apply_discount(request, ticket_id):
         {
             "ticket": ticket,
             "form": form,
+            "next_url": next_url,
         },
     )

@@ -14,10 +14,6 @@
                     El monto se calcula automáticamente según la hora de entrada y salida.
                 </p>
             </div>
-
-            <a href="{% url 'tickets:active_parking_tickets' %}" class="btn btn-outline-secondary">
-                Volver
-            </a>
         </div>
 
         <div class="card shadow-sm border-0 mb-3">
@@ -95,15 +91,24 @@
 
                 <hr>
 
+                {% if ticket.discount_amount > 0 %}
+                <div class="d-flex justify-content-between">
+                    <span>Descuento:</span>
+                    <span> ₡{{ ticket.discount_amount }}</span>
+                </div>
+                {% endif %}
+
                 <div class="d-flex justify-content-between">
                     <span>Subtotal sin IVA</span>
                     <span>₡{{ tax_data.subtotal_without_tax }}</span>
                 </div>
 
+
                 <div class="d-flex justify-content-between">
                     <span>IVA</span>
                     <span>₡{{ tax_data.tax_amount }}</span>
                 </div>
+
 
                 <div class="d-flex justify-content-between fs-4 fw-bold mt-2">
                     <span>Total a pagar</span>
@@ -114,6 +119,7 @@
 
         <form method="post" class="card shadow-sm border-0">
             {% csrf_token %}
+            <input type="hidden" name="next" value="{{ next_url }}">
 
             <div class="card-body">
                 <h5 class="card-title mb-3">Datos de pago</h5>
@@ -149,8 +155,8 @@
                 </a>
 
                 <div class="d-flex gap-2">
-                    <a href="{% url 'tickets:active_parking_tickets' %}" class="btn btn-outline-secondary">
-                        Cancelar
+                    <a href="{{ next_url }}" class="btn btn-outline-secondary">
+                        ← Ir a tickets
                     </a>
 
                     <button type="submit" class="btn btn-success">

@@ -15,9 +15,6 @@
                 </p>
             </div>
 
-            <a href="{% url 'tickets:wash_ticket_detail' ticket.id %}" class="btn btn-outline-secondary">
-                Volver
-            </a>
         </div>
 
         <div class="alert alert-warning">
@@ -26,6 +23,7 @@
 
         <form method="post" class="card shadow-sm border-0">
             {% csrf_token %}
+            <input type="hidden" name="next" value="{{ next_url }}">
 
             <div class="card-body">
 
@@ -110,8 +108,8 @@
             </div>
 
             <div class="card-footer bg-white d-flex justify-content-end gap-2">
-                <a href="{% url 'tickets:wash_ticket_detail' ticket.id %}" class="btn btn-outline-secondary">
-                    Cancelar
+                <a href="{{ next_url }}" class="btn btn-outline-secondary">
+                    ← Ir a tickets
                 </a>
 
                 <button type="submit" class="btn btn-warning">

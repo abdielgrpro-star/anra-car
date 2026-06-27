@@ -8,33 +8,6 @@
     <div class="col-lg-6">
 
         <div class="d-flex justify-content-between align-items-center mb-3 no-print">
-            <a href="{% url 'tickets:create_wash_ticket' %}" class="btn btn-outline-secondary">
-                Crear otro
-            </a>
-
-            <div class="d-flex gap-2">
-                {% if ticket.status == "pending_payment" %}
-                <a href="{% url 'tickets:edit_wash_ticket' ticket.id %}" class="btn btn-warning">
-                    Editar
-                </a>
-
-                <a href="{% url 'tickets:apply_discount' ticket.id %}" class="btn btn-warning">
-                    Aplicar descuento
-                </a>
-
-
-                <a href="{% url 'tickets:charge_wash_ticket' ticket.id %}" class="btn btn-success">
-                    Cobrar
-                </a>
-                {% endif %}
-
-                <a href="{% url 'tickets:reprint_ticket' ticket.id %}" class="btn btn-primary">
-                    {% if ticket.print_count == 0 %}
-                    Imprimir ticket
-                    {% else %}
-                    Reimprimir ticket
-                    {% endif %}
-                </a>
             </div>
         </div>
 
@@ -130,16 +103,13 @@
                         <span>₡{{ ticket.tax_amount }}</span>
                     </div>
 
+                    {% if ticket.discount_amount > 0 %}
                     <div class="d-flex justify-content-between">
                         <span>Descuento</span>
                         <span>₡{{ ticket.discount_amount }}</span>
                     </div>
-
-                    {% if ticket.discount_amount > 0 %}
-                    <p class="mb-1">
-                        <strong>Descuento:</strong> ₡{{ ticket.discount_amount }}
-                    </p>
                     {% endif %}
+
 
                     <div class="d-flex justify-content-between fs-4 fw-bold mt-2">
                         <span>Total</span>
@@ -163,6 +133,11 @@
                         El código solo se muestra al crear el ticket.
                     </div>
                     {% endif %}
+                    <div class="fs-4 fw-bold border rounded p-2 bg-light">
+                        <a href="{{ next_url }}" class="btn btn-outline-secondary">
+                    ← Ir a tickets
+                </a>
+                    </div>
                 </div>
 
                 <hr>

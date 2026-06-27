@@ -313,18 +313,25 @@ class CancelTicketForm(OtpAuthorizationForm):
 class ReprintTicketForm(OtpAuthorizationForm):
     pass
 
-
 class ApplyDiscountForm(OtpAuthorizationForm):
     discount_amount = forms.DecimalField(
         label="Monto de descuento",
         max_digits=12,
         decimal_places=2,
         min_value=Decimal("0.00"),
-        required=True,
+        required=False,
         widget=forms.NumberInput(attrs={
             "class": "form-control",
             "step": "0.01",
             "placeholder": "Ejemplo: 1000",
+        }),
+    )
+
+    remove_discount = forms.BooleanField(
+        label="Eliminar descuento",
+        required=False,
+        widget=forms.CheckboxInput(attrs={
+            "class": "form-check-input",
         }),
     )
 
@@ -335,3 +342,21 @@ class ApplyDiscountForm(OtpAuthorizationForm):
 
         if ticket and not self.is_bound:
             self.fields["discount_amount"].initial = ticket.discount_amount
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        discount_amount = cleaned_data.get("discount_amount")
+        remove_discount = cleaned_data.get("remove_discount")
+
+        if remove_discount:
+            cleaned_data["discount_amount"] = Decimal("0.00")
+            return cleaned_data
+
+        if discount_amount is None:
+            self.add_error(
+                "discount_amount",
+                "Debe ingresar un monto de descuento.",
+            )
+
+        return cleaned_data
