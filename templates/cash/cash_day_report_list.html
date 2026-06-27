@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+
+{% block title %}Reporte de cajas | Anracar{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="h3 fw-bold mb-1">Reporte de cajas</h1>
+        <p class="text-muted mb-0">
+            Consulta ganancias por día o por rango de fechas.
+        </p>
+    </div>
+</div>
+
+<form method="get" class="card shadow-sm border-0 mb-4">
+    <div class="card-body">
+        <div class="row g-3">
+
+            <div class="col-md-3">
+                <label class="form-label">Desde</label>
+                <input
+                    type="date"
+                    name="date_from"
+                    value="{{ date_from }}"
+                    class="form-control"
+                >
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label">Hasta</label>
+                <input
+                    type="date"
+                    name="date_to"
+                    value="{{ date_to }}"
+                    class="form-control"
+                >
+            </div>
+
+            <div class="col-md-3 d-flex align-items-end gap-2">
+                <button type="submit" class="btn btn-primary w-100">
+                    Filtrar
+                </button>
+
+                <a href="{% url 'cash:cash_day_report_list' %}" class="btn btn-outline-secondary">
+                    Limpiar
+                </a>
+            </div>
+
+            <div class="col-md-3 d-flex align-items-end">
+                <a
+                    href="{% url 'cash:cash_day_report_export_csv' %}?date_from={{ date_from }}&date_to={{ date_to }}"
+                    class="btn btn-success w-100"
+                >
+                    Exportar CSV
+                </a>
+            </div>
+
+        </div>
+    </div>
+</form>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <small class="text-muted">Total efectivo</small>
+                <h4 class="fw-bold mb-0">₡{{ total_cash }}</h4>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <small class="text-muted">Total SINPE</small>
+                <h4 class="fw-bold mb-0">₡{{ total_sinpe }}</h4>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <small class="text-muted">Total general</small>
+                <h4 class="fw-bold mb-0">₡{{ total_general }}</h4>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <small class="text-muted">Tickets cobrados</small>
+                <h4 class="fw-bold mb-0">{{ total_tickets }}</h4>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-bold">Cajas</h5>
+
+        <span class="badge text-bg-secondary">
+            Máximo {{ result_limit }} cajas en pantalla
+        </span>
+    </div>
+
+    <div class="card-body">
+        {% if summaries %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Estado</th>
+                            <th>Efectivo</th>
+                            <th>SINPE</th>
+                            <th>Total</th>
+                            <th>Tickets cobrados</th>
+                            <th>Primer cobro</th>
+                            <th>Último cobro</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {% for summary in summaries %}
+                            <tr>
+                                <td>
+                                    {{ summary.cash_day.business_date|date:"d/m/Y" }}
+                                </td>
+
+                                <td>
+                                    {{ summary.cash_day.get_status_display }}
+                                </td>
+
+                                <td>
+                                    ₡{{ summary.cash_total }}
+                                </td>
+
+                                <td>
+                                    ₡{{ summary.sinpe_total }}
+                                </td>
+
+                                <td class="fw-bold">
+                                    ₡{{ summary.total_general }}
+                                </td>
+
+                                <td>
+                                    {{ summary.tickets_count }}
+                                </td>
+
+                                <td>
+                                    {% if summary.first_payment %}
+                                        {{ summary.first_payment.ticket.ticket_number }}
+                                        <br>
+                                        <small class="text-muted">
+                                            {{ summary.first_payment.created_at|date:"H:i" }}
+                                        </small>
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+
+                                <td>
+                                    {% if summary.last_payment %}
+                                        {{ summary.last_payment.ticket.ticket_number }}
+                                        <br>
+                                        <small class="text-muted">
+                                            {{ summary.last_payment.created_at|date:"H:i" }}
+                                        </small>
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="text-muted mb-0">
+                No hay cajas para el filtro seleccionado.
+            </p>
+        {% endif %}
+    </div>
+</div>
+
+{% if selected_cash_day %}
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white">
+            <h5 class="mb-0 fw-bold">
+                Tickets cobrados el {{ selected_cash_day.business_date|date:"d/m/Y" }}
+            </h5>
+        </div>
+
+        <div class="card-body">
+            {% if selected_payments %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead>
+                            <tr>
+                                <th>Hora</th>
+                                <th>Ticket</th>
+                                <th>Tipo</th>
+                                <th>Estado</th>
+                                <th>Placa</th>
+                                <th>Cliente</th>
+                                <th>Método</th>
+                                <th>Monto</th>
+                                <th>Cobrado por</th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            {% for payment in selected_payments %}
+                                <tr>
+                                    <td>
+                                        {{ payment.created_at|date:"H:i" }}
+                                    </td>
+
+                                    <td>
+                                        {{ payment.ticket.ticket_number }}
+                                    </td>
+
+                                    <td>
+                                        {{ payment.ticket.get_ticket_type_display }}
+                                    </td>
+
+                                    <td>
+                                        {{ payment.ticket.get_status_display }}
+                                    </td>
+
+                                    <td>
+                                        {{ payment.ticket.vehicle_plate }}
+                                    </td>
+
+                                    <td>
+                                        {{ payment.ticket.customer_name_snapshot }}
+                                    </td>
+
+                                    <td>
+                                        {{ payment.get_payment_method_display }}
+                                    </td>
+
+                                    <td class="fw-bold">
+                                        ₡{{ payment.amount }}
+                                    </td>
+
+                                    <td>
+                                        {{ payment.received_by_employee.username }}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p class="text-muted mb-0">
+                    Esta caja no tiene pagos registrados.
+                </p>
+            {% endif %}
+        </div>
+    </div>
+{% endif %}
+
+{% endblock %}
