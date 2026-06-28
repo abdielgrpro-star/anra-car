@@ -68,3 +68,49 @@ def calculate_parking_total(minutes, first_hour_price, block_price, block_minute
     total = first_hour_price + (Decimal(extra_blocks) * block_price)
 
     return money(total)
+
+def calculate_current_parking_total(ticket):
+    """
+    Calcula el total actual de un ticket de parqueo activo.
+
+    Regla:
+    - 0 a 60 minutos: primera hora
+    - 61 a 89 minutos: primera hora + 1 bloque
+    - 90 a 119 minutos: primera hora + 2 bloques
+    - etc.
+    """
+
+    if not ticket.parking_entry_at:
+        return ticket.total_with_tax, 0
+
+    now = timezone.now()
+
+    minutes = int(
+        (now - ticket.parking_entry_at).total_seconds() // 60
+    )
+
+    if minutes < 0:
+        minutes = 0
+
+    first_hour_price = (
+        ticket.parking_first_hour_price_snapshot
+        or Decimal("1000.00")
+    )
+
+    block_price = (
+        ticket.parking_block_price_snapshot
+        or Decimal("500.00")
+    )
+
+    block_minutes = ticket.parking_block_minutes_snapshot or 30
+
+    if minutes <= 60:
+        total = first_hour_price
+    else:
+        extra_blocks = ((minutes - 60) // block_minutes) + 1
+        total = first_hour_price + (Decimal(extra_blocks) * block_price)
+
+    return total, minutes
+
+
+

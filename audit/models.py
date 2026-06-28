@@ -77,22 +77,22 @@ class AuditLog(models.Model):
     DEACTIVATE_EMPLOYEE = "deactivate_employee"
 
     ACTION_TYPE_CHOICES = [
-        (LOGIN, "Login"),
-        (CREATE_WASH_TICKET, "Create wash ticket"),
-        (CREATE_PARKING_TICKET, "Create parking ticket"),
-        (CHARGE_WASH_TICKET, "Charge wash ticket"),
-        (CHARGE_PARKING_TICKET, "Charge parking ticket"),
-        (EDIT_CUSTOMER_DATA, "Edit customer data"),
-        (EDIT_TICKET, "Edit ticket"),
-        (APPLY_DISCOUNT, "Apply discount"),
-        (CANCEL_TICKET, "Cancel ticket"),
-        (REPRINT_TICKET, "Reprint ticket"),
-        (CLOSE_WITHOUT_CODE, "Close without code"),
-        (REOPEN_TICKET, "Reopen ticket"),
-        (CHANGE_SERVICE_PRICE, "Change service price"),
-        (CHANGE_EXTRA_PRICE, "Change extra price"),
-        (CREATE_EMPLOYEE, "Create employee"),
-        (DEACTIVATE_EMPLOYEE, "Deactivate employee"),
+        (LOGIN, "Inicio de sesión"),
+        (CREATE_WASH_TICKET, "Crear ticket de lavado"),
+        (CREATE_PARKING_TICKET, "Crear ticket de parqueo"),
+        (CHARGE_WASH_TICKET, "Cobrar ticket de lavado"),
+        (CHARGE_PARKING_TICKET, "Cobrar ticket de parqueo"),
+        (EDIT_CUSTOMER_DATA, "Editar datos del cliente"),
+        (EDIT_TICKET, "Editar ticket"),
+        (APPLY_DISCOUNT, "Aplicar descuento"),
+        (CANCEL_TICKET, "Anular ticket"),
+        (REPRINT_TICKET, "Reimprimir ticket"),
+        (CLOSE_WITHOUT_CODE, "Cerrar sin código"),
+        (REOPEN_TICKET, "Reabrir ticket"),
+        (CHANGE_SERVICE_PRICE, "Cambiar precio de servicio"),
+        (CHANGE_EXTRA_PRICE, "Cambiar precio de extra"),
+        (CREATE_EMPLOYEE, "Crear empleado"),
+        (DEACTIVATE_EMPLOYEE, "Desactivar empleado"),
     ]
 
     employee = models.ForeignKey(

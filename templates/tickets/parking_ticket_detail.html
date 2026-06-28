@@ -107,14 +107,36 @@
                 {% endif %}
 
                 <div class="d-flex justify-content-between fs-4 fw-bold mt-2">
-                    {% if ticket.parking_exit_at %}
-                    <span>Total</span>
+                    {% if ticket.status == "active" %}
+                        <span>Total actual</span>
+                        <span>₡{{ parking_total_after_discount }}</span>
+                    {% elif ticket.parking_exit_at %}
+                        <span>Total</span>
+                        <span>₡{{ ticket.total_with_tax }}</span>
                     {% else %}
-                    <span>Monto mínimo</span>
+                        <span>Monto mínimo</span>
+                        <span>₡{{ ticket.total_with_tax }}</span>
                     {% endif %}
-
-                    <span>₡{{ ticket.total_with_tax }}</span>
                 </div>
+
+                {% if ticket.status == "active" %}
+                    <div class="mt-2">
+                        <small class="text-muted">
+                            Calculado con {{ parking_current_minutes }} minutos.
+                        </small>
+
+                        {% if ticket.discount_amount > 0 %}
+                            <br>
+                            <small class="text-muted">
+                                Total sin descuento: ₡{{ parking_current_total }}
+                            </small>
+                            <br>
+                            <small class="text-warning">
+                                Descuento aplicado: ₡{{ ticket.discount_amount }}
+                            </small>
+                        {% endif %}
+                    </div>
+                {% endif %}
 
                 <hr>
 

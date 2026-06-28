@@ -26,8 +26,8 @@ class Ticket(models.Model):
     PARKING = "parking"
     # each ticket has 1 type wash or parking
     TICKET_TYPE_CHOICES = [
-        (WASH, "Wash"),
-        (PARKING, "Parking"),
+        (WASH, "Lavado"),
+        (PARKING, "Parqueo"),
     ]
 # this are the ticket status
     PENDING_PAYMENT = "pending_payment"
@@ -36,10 +36,10 @@ class Ticket(models.Model):
     CANCELLED = "cancelled"
 
     STATUS_CHOICES = [
-        (PENDING_PAYMENT, "Pending payment"),
-        (ACTIVE, "Active"),
-        (PAID, "Paid"),
-        (CANCELLED, "Cancelled"),
+        (PENDING_PAYMENT, "Pendiente de pago"),
+        (ACTIVE, "Activo"),
+        (PAID, "Pagado"),
+        (CANCELLED, "Anulado"),
     ]
 
     ticket_number = models.CharField(

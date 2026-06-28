@@ -7,22 +7,23 @@ from cash.models import CashDay
 
 
 AUTO_OPEN_TIME = time(7, 0)
-AUTO_CLOSE_TIME = time(21, 0)
+AUTO_CLOSE_TIME = time(20, 0)
 
 
 def is_after_auto_close_time():
-    now = timezone.localtime()
-    return now.time() >= AUTO_CLOSE_TIME
+    return timezone.localtime().time() >= AUTO_CLOSE_TIME
+
+
+def automatic_close_message():
+    return (
+        "El cierre de caja automático ya fue efectuado. "
+        "Ya no se pueden crear ni cobrar tickets por hoy"
+    )
+
 
 
 @transaction.atomic
 def close_today_cash_day_automatically_if_needed():
-    """
-    Cierra la caja de hoy automáticamente si ya son las 9:00 pm o más.
-    """
-    if not is_after_auto_close_time():
-        return None
-
     today = timezone.localdate()
 
     cash_day = CashDay.objects.filter(
@@ -30,25 +31,18 @@ def close_today_cash_day_automatically_if_needed():
         status=CashDay.OPEN,
     ).first()
 
-    if not cash_day:
-        return None
-
-    now = timezone.now()
-
-    cash_day.status = CashDay.CLOSED
-    cash_day.closed_at = now
-    cash_day.closed_by_employee = None
-    cash_day.closed_automatically = True
-
-    cash_day.save(
-        update_fields=[
-            "status",
-            "closed_at",
-            "closed_by_employee",
-            "closed_automatically",
-            "updated_at",
-        ]
-    )
+    if cash_day and is_after_auto_close_time():
+        cash_day.status = CashDay.CLOSED
+        cash_day.closed_at = timezone.now()
+        cash_day.closed_automatically = True
+        cash_day.save(
+            update_fields=[
+                "status",
+                "closed_at",
+                "closed_automatically",
+                "updated_at",
+            ]
+        )
 
     return cash_day
 
@@ -79,38 +73,45 @@ def get_today_cash_day_for_view():
 
 @transaction.atomic
 def get_or_create_today_cash_day_for_operation():
-    """
-    Devuelve la caja de hoy para operaciones como crear tickets.
-
-    Si no existe, la crea.
-    Si está cerrada y aún no son las 9:00 pm, la reabre.
-    Si ya son las 9:00 pm o más, la deja cerrada.
-    """
-    close_today_cash_day_automatically_if_needed()
-
     today = timezone.localdate()
+
+    close_today_cash_day_automatically_if_needed()
 
     cash_day, created = CashDay.objects.get_or_create(
         business_date=today,
         defaults={
             "status": CashDay.OPEN,
+            "opened_at": timezone.now(),
+            "closed_automatically": False,
         },
     )
 
-    if created:
+    # Si ya pasó la hora de cierre automático, no permitimos operar.
+    if is_after_auto_close_time():
+        if cash_day.status != CashDay.CLOSED or not cash_day.closed_automatically:
+            cash_day.status = CashDay.CLOSED
+            cash_day.closed_at = timezone.now()
+            cash_day.closed_automatically = True
+            cash_day.save(
+                update_fields=[
+                    "status",
+                    "closed_at",
+                    "closed_automatically",
+                    "updated_at",
+                ]
+            )
+
         return cash_day
 
-    if cash_day.status == CashDay.CLOSED and not is_after_auto_close_time():
+    # Si está cerrada manualmente antes de las 9:00 pm, sí se puede reabrir.
+    if cash_day.status == CashDay.CLOSED and not cash_day.closed_automatically:
         cash_day.status = CashDay.OPEN
         cash_day.closed_at = None
-        cash_day.closed_by_employee = None
         cash_day.closed_automatically = False
-
         cash_day.save(
             update_fields=[
                 "status",
                 "closed_at",
-                "closed_by_employee",
                 "closed_automatically",
                 "updated_at",
             ]
@@ -143,3 +144,15 @@ def close_cash_day_manually(*, cash_day, closed_by_employee):
     )
 
     return cash_day
+
+def cash_day_allows_operations(cash_day):
+    if not cash_day:
+        return False
+
+    if cash_day.status != CashDay.OPEN:
+        return False
+
+    if is_after_auto_close_time():
+        return False
+
+    return True

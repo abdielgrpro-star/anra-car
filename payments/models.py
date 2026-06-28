@@ -10,7 +10,7 @@ class Payment(models.Model):
     SINPE = "sinpe"
 
     PAYMENT_METHOD_CHOICES = [
-        (CASH, "Cash"),
+        (CASH, "Efectivo"),
         (SINPE, "SINPE"),
     ]
 # this will connect the payment with an specific ticket

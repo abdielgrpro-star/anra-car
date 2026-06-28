@@ -265,7 +265,7 @@
                                             <h6 class="fw-bold">Después</h6>
 
                                             <pre
-                                                class="bg-light border rounded p-3 small mb-0 audit-json-box">{{ log.new_values|default:"{}" }}</pre>
+                                                class="bg-light border rounded p-3 small mb-0 audit-json-box">{{ log.old_values|pretty_json }}</pre>
                                         </div>
 
                                     </div>

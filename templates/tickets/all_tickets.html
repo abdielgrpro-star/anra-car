@@ -413,7 +413,14 @@
                                 </td>
 
                                 <td>
-                                    <strong>₡{{ ticket.total_with_tax }}</strong>
+                                    <strong>₡{{ ticket.display_total_with_tax }}</strong>
+
+                                    {% if ticket.ticket_type == "parking" and ticket.status == "active" %}
+                                        <br>
+                                        <small class="text-muted">
+                                            {{ ticket.display_parking_minutes }} min
+                                        </small>
+                                    {% endif %}
                                 </td>
 
                                 <td>

@@ -8,12 +8,18 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.urls import reverse
+from tickets.utils import calculate_parking_total, calculate_current_parking_total
 
 from audit.models import AuditLog, OtpUsage
 from accounts.permissions import user_can_authorize_sensitive_actions
 from audit.models import AuditLog
 from audit.utils import validate_sensitive_action_authorization
-from cash.services import get_or_create_today_cash_day_for_operation
+from decimal import Decimal
+from cash.services import (
+    get_or_create_today_cash_day_for_operation,
+    cash_day_allows_operations,
+    automatic_close_message,
+)
 from catalog.models import Service
 from payments.models import Payment
 from accounts.models import Employee
@@ -71,6 +77,13 @@ def create_wash_ticket(request):
             )
 
             cash_day = get_or_create_today_cash_day_for_operation()
+
+            if not cash_day_allows_operations(cash_day):
+                messages.error(
+                    request,
+                    automatic_close_message(),
+                )
+                return redirect("tickets:all_tickets")
 
             service_total = service.price_with_tax
             extras_total = sum(
@@ -201,6 +214,13 @@ def create_parking_ticket(request):
 
             cash_day = get_or_create_today_cash_day_for_operation()
 
+            if not cash_day_allows_operations(cash_day):
+                messages.error(
+                    request,
+                    automatic_close_message(),
+                )
+                return redirect("tickets:all_tickets")
+
             parking_service = get_object_or_404(
                 Service,
                 service_type=Service.PARKING,
@@ -308,7 +328,59 @@ def parking_ticket_detail(request, ticket_id):
             "updated_by_employee",
         ),
         id=ticket_id,
+        ticket_type=Ticket.PARKING,
     )
+
+    parking_current_total = ticket.total_with_tax
+    parking_current_minutes = ticket.parking_minutes or 0
+    parking_total_after_discount = ticket.total_with_tax
+
+    if ticket.status == Ticket.ACTIVE:
+        now = timezone.now()
+
+        if ticket.parking_entry_at:
+            parking_current_minutes = int(
+                (now - ticket.parking_entry_at).total_seconds() // 60
+            )
+        else:
+            parking_current_minutes = 0
+
+        if parking_current_minutes < 0:
+            parking_current_minutes = 0
+
+        first_hour_price = (
+            ticket.parking_first_hour_price_snapshot
+            or Decimal("1000.00")
+        )
+
+        block_price = (
+            ticket.parking_block_price_snapshot
+            or Decimal("500.00")
+        )
+
+        block_minutes = ticket.parking_block_minutes_snapshot or 30
+
+        if parking_current_minutes <= 60:
+            parking_current_total = first_hour_price
+        else:
+            extra_blocks = ((parking_current_minutes - 60) // block_minutes) + 1
+
+            parking_current_total = (
+                first_hour_price
+                + (Decimal(extra_blocks) * block_price)
+            )
+
+        parking_total_after_discount = (
+            parking_current_total - ticket.discount_amount
+        )
+
+        if parking_total_after_discount < Decimal("0.00"):
+            parking_total_after_discount = Decimal("0.00")
+
+    else:
+        parking_current_total = ticket.total_with_tax
+        parking_total_after_discount = ticket.total_with_tax
+        parking_current_minutes = ticket.parking_minutes or 0
 
     return render(
         request,
@@ -316,6 +388,9 @@ def parking_ticket_detail(request, ticket_id):
         {
             "ticket": ticket,
             "next_url": next_url,
+            "parking_current_total": parking_current_total,
+            "parking_current_minutes": parking_current_minutes,
+            "parking_total_after_discount": parking_total_after_discount,
         },
     )
 
@@ -431,6 +506,13 @@ def charge_wash_ticket(request, ticket_id):
 
             payment_cash_day = get_or_create_today_cash_day_for_operation()
 
+            if not cash_day_allows_operations(payment_cash_day):
+                messages.error(
+                    request,
+                    automatic_close_message(),
+                )
+                return redirect(next_url)
+
             Payment.objects.create(
                 ticket=ticket,
                 cash_day=payment_cash_day,
@@ -444,7 +526,6 @@ def charge_wash_ticket(request, ticket_id):
             ticket.status = Ticket.PAID
             ticket.paid_at = timezone.now()
             ticket.updated_by_employee = request.user
-
             ticket.save(
                 update_fields=[
                     "cash_day",
@@ -597,6 +678,13 @@ def charge_parking_ticket(request, ticket_id):
             }
 
             payment_cash_day = get_or_create_today_cash_day_for_operation()
+
+            if not cash_day_allows_operations(payment_cash_day):
+                messages.error(
+                    request,
+                    automatic_close_message(),
+                )
+                return redirect(next_url)
 
             Payment.objects.create(
                 ticket=ticket,
@@ -771,6 +859,13 @@ def charge_wash_without_code(request, ticket_id):
             }
 
             payment_cash_day = get_or_create_today_cash_day_for_operation()
+
+            if not cash_day_allows_operations(payment_cash_day):
+                messages.error(
+                    request,
+                    automatic_close_message(),
+                )
+                return redirect(next_url)
 
             Payment.objects.create(
                 ticket=ticket,
@@ -969,6 +1064,13 @@ def charge_parking_without_code(request, ticket_id):
 
             payment_cash_day = get_or_create_today_cash_day_for_operation()
 
+            if not cash_day_allows_operations(payment_cash_day):
+                messages.error(
+                    request,
+                    automatic_close_message(),
+                )
+                return redirect(next_url)
+
             Payment.objects.create(
                 ticket=ticket,
                 cash_day=payment_cash_day,
@@ -1124,6 +1226,53 @@ def all_tickets(request):
             | Q(customer_phone_snapshot__icontains=search)
         )
 
+    tickets = list(tickets[:100])
+
+    for ticket in tickets:
+        ticket.display_total_with_tax = ticket.total_with_tax
+        ticket.display_parking_minutes = ticket.parking_minutes or 0
+
+        if ticket.ticket_type == Ticket.PARKING and ticket.status == Ticket.ACTIVE:
+            now = timezone.now()
+
+            if ticket.parking_entry_at:
+                parking_minutes = int(
+                    (now - ticket.parking_entry_at).total_seconds() // 60
+                )
+            else:
+                parking_minutes = 0
+
+            if parking_minutes < 0:
+                parking_minutes = 0
+
+            first_hour_price = (
+                ticket.parking_first_hour_price_snapshot
+                or Decimal("1000.00")
+            )
+
+            block_price = (
+                ticket.parking_block_price_snapshot
+                or Decimal("500.00")
+            )
+
+            block_minutes = ticket.parking_block_minutes_snapshot or 30
+
+            if parking_minutes <= 60:
+                parking_total = first_hour_price
+            else:
+                extra_blocks = ((parking_minutes - 60) // block_minutes) + 1
+                parking_total = first_hour_price + (
+                    Decimal(extra_blocks) * block_price
+                )
+
+            total_after_discount = parking_total - ticket.discount_amount
+
+            if total_after_discount < Decimal("0.00"):
+                total_after_discount = Decimal("0.00")
+
+            ticket.display_total_with_tax = total_after_discount
+            ticket.display_parking_minutes = parking_minutes
+
     employees = Employee.objects.filter(
         is_active=True,
     ).order_by("username")
@@ -1132,7 +1281,7 @@ def all_tickets(request):
         request,
         "tickets/all_tickets.html",
         {
-            "tickets": tickets[:100],
+            "tickets": tickets,
             "date": date,
             "ticket_type": ticket_type,
             "status": status,
@@ -1985,6 +2134,38 @@ def apply_discount(request, ticket_id):
             return redirect(next_url)
 
         return redirect(next_url)
+    
+    parking_current_total = ticket.total_with_tax
+    parking_current_minutes = ticket.parking_minutes or 0
+
+    if ticket.ticket_type == Ticket.PARKING and ticket.status == Ticket.ACTIVE:
+        now = timezone.now()
+
+        if ticket.parking_entry_at:
+            parking_current_minutes = int(
+                (now - ticket.parking_entry_at).total_seconds() // 60
+            )
+        else:
+            parking_current_minutes = 0
+
+        if parking_current_minutes < 0:
+            parking_current_minutes = 0
+
+        first_hour_price = ticket.parking_first_hour_price_snapshot or Decimal("1000.00")
+        block_price = ticket.parking_block_price_snapshot or Decimal("500.00")
+        block_minutes = ticket.parking_block_minutes_snapshot or 30
+
+        if parking_current_minutes <= 60:
+            parking_current_total = first_hour_price
+        else:
+            extra_minutes = parking_current_minutes - 60
+            extra_blocks = ((parking_current_minutes - 60) // block_minutes) + 1
+            parking_current_total = first_hour_price + (Decimal(extra_blocks) * block_price)
+    
+    parking_total_after_discount = parking_current_total - ticket.discount_amount
+
+    if parking_total_after_discount < Decimal("0.00"):
+        parking_total_after_discount = Decimal("0.00")
 
     if request.method == "POST":
         form = ApplyDiscountForm(
@@ -2051,6 +2232,9 @@ def apply_discount(request, ticket_id):
                         "ticket": ticket,
                         "form": form,
                         "next_url": next_url,
+                        "parking_current_total": parking_current_total,
+                        "parking_current_minutes": parking_current_minutes,
+                        "parking_total_after_discount": parking_total_after_discount,
                     },
                 )
 
@@ -2080,6 +2264,9 @@ def apply_discount(request, ticket_id):
                             "ticket": ticket,
                             "form": form,
                             "next_url": next_url,
+                            "parking_current_total": parking_current_total,
+                            "parking_current_minutes": parking_current_minutes,
+                            "parking_total_after_discount": parking_total_after_discount,
                         },
                     )
 
@@ -2108,11 +2295,11 @@ def apply_discount(request, ticket_id):
                 )
 
             else:
-                if discount_amount > ticket.total_with_tax:
+                if discount_amount > parking_current_total:
                     form.add_error(
                         "discount_amount",
-                        "El descuento no puede ser mayor al monto actual del parqueo.",
-                    )
+                        f"El descuento no puede ser mayor al monto actual del parqueo: ₡{parking_current_total}.",
+                    )       
 
                     return render(
                         request,
@@ -2121,6 +2308,9 @@ def apply_discount(request, ticket_id):
                             "ticket": ticket,
                             "form": form,
                             "next_url": next_url,
+                            "parking_current_total": parking_current_total,
+                            "parking_current_minutes": parking_current_minutes,
+                            "parking_total_after_discount": parking_total_after_discount,
                         },
                     )
 
@@ -2188,6 +2378,9 @@ def apply_discount(request, ticket_id):
             "ticket": ticket,
             "form": form,
             "next_url": next_url,
+            "parking_current_total": parking_current_total,
+            "parking_current_minutes": parking_current_minutes,
+            "parking_total_after_discount": parking_total_after_discount,
         },
     )
 

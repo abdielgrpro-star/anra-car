@@ -31,26 +31,62 @@
             <div class="card-header bg-dark text-white">
                 Datos actuales del ticket
             </div>
-
             <div class="card-body">
                 <div class="row g-3">
 
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <small class="text-muted">Estado</small>
-                        <div class="fw-bold">{{ ticket.get_status_display }}</div>
+                        <div class="fw-bold">
+                            {{ ticket.get_status_display }}
+                        </div>
                     </div>
 
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <small class="text-muted">Total actual</small>
-                        <div class="fw-bold">₡{{ ticket.total_with_tax }}</div>
+
+                        {% if ticket.ticket_type == "parking" and ticket.status == "active" %}
+                        <div class="fw-bold">
+                            ₡{{ parking_current_total }}
+                        </div>
+                        <small class="text-muted">
+                            Calculado con {{ parking_current_minutes }} minutos
+                        </small>
+                        {% else %}
+                        <div class="fw-bold">
+                            ₡{{ ticket.total_with_tax }}
+                        </div>
+                        {% endif %}
                     </div>
 
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <small class="text-muted">Descuento actual</small>
-                        <div class="fw-bold">₡{{ ticket.discount_amount }}</div>
+                        <div class="fw-bold text-warning">
+                            ₡{{ ticket.discount_amount }}
+                        </div>
+                    </div>
+
+                    <div class="col-md-3">
+                        <small class="text-muted">Total con descuento</small>
+
+                        {% if ticket.ticket_type == "parking" and ticket.status == "active" %}
+                        <div class="fw-bold text-success">
+                            ₡{{ parking_total_after_discount }}
+                        </div>
+                        {% else %}
+                        <div class="fw-bold text-success">
+                            ₡{{ ticket.total_with_tax }}
+                        </div>
+                        {% endif %}
                     </div>
 
                 </div>
+
+                {% if ticket.ticket_type == "parking" and ticket.status == "active" %}
+                <div class="alert alert-info mt-3 mb-0">
+                    Este parqueo sigue activo. El total mostrado es calculado al momento actual.
+                    Si se cobra más tarde, el monto puede aumentar según el tiempo transcurrido.
+                </div>
+                {% endif %}
             </div>
         </div>
 

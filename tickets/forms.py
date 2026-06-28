@@ -1,5 +1,6 @@
 from django import forms
 from audit.forms import OtpAuthorizationForm, OtpAuthorizationForm
+from accounts.permissions import user_requires_otp_for_sensitive_actions
 from catalog.models import Extra, Service
 from decimal import Decimal
 
