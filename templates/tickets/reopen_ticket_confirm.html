@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Reabrir ticket | Anracar{% endblock %}
+
+{% block content %}
+
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-white">
+        <h1 class="h4 fw-bold mb-0">Reabrir ticket</h1>
+    </div>
+
+    <div class="card-body">
+        <div class="alert alert-warning">
+            <strong>Atención:</strong>
+            al reabrir este ticket, el pago asociado dejará de contar en la caja.
+            Luego el ticket podrá editarse, anularse, aplicar descuento o cobrarse nuevamente.
+        </div>
+
+        <p class="mb-1">
+            <strong>Ticket:</strong> {{ ticket.ticket_number }}
+        </p>
+
+        <p class="mb-1">
+            <strong>Estado actual:</strong> {{ ticket.get_status_display }}
+        </p>
+
+        <p class="mb-1">
+            <strong>Total actual:</strong> ₡{{ ticket.total_with_tax }}
+        </p>
+
+        {% if ticket.payment %}
+            <p class="mb-1">
+                <strong>Método de pago:</strong> {{ ticket.payment.get_payment_method_display }}
+            </p>
+
+            <p class="mb-1">
+                <strong>Monto pagado:</strong> ₡{{ ticket.payment.amount }}
+            </p>
+
+            <p class="mb-3">
+                <strong>Caja del pago:</strong>
+                {{ ticket.payment.cash_day.business_date|date:"d/m/Y" }}
+                — Caja #{{ ticket.payment.cash_day.id }}
+            </p>
+        {% endif %}
+
+        <form method="post">
+            {% csrf_token %}
+
+            <input type="hidden" name="next" value="{{ next_url }}">
+
+            <div class="mb-3">
+                <label class="form-label">Motivo de reapertura</label>
+                <textarea
+                    name="reason"
+                    class="form-control"
+                    rows="3"
+                    required
+                    placeholder="Ejemplo: Cliente reclama daño, se reabre para aplicar descuento."
+                ></textarea>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-warning">
+                    Sí, reabrir ticket
+                </button>
+
+                <a href="{{ next_url }}" class="btn btn-outline-secondary">
+                    Cancelar
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}

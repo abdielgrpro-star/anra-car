@@ -10,6 +10,8 @@ from django.utils import timezone
 from django.urls import reverse
 
 from audit.models import AuditLog, OtpUsage
+from accounts.permissions import user_can_authorize_sensitive_actions
+from audit.models import AuditLog
 from audit.utils import validate_sensitive_action_authorization
 from cash.services import get_or_create_today_cash_day_for_operation
 from catalog.models import Service
@@ -34,6 +36,7 @@ from tickets.utils import (
     generate_closing_code,
     generate_ticket_number,
 )
+
 
 
 def get_next_url(request, default_url_name="tickets:all_tickets"):
@@ -2184,6 +2187,125 @@ def apply_discount(request, ticket_id):
         {
             "ticket": ticket,
             "form": form,
+            "next_url": next_url,
+        },
+    )
+
+@login_required
+@transaction.atomic
+def reopen_ticket(request, ticket_id):
+    if not user_can_authorize_sensitive_actions(request.user):
+        messages.error(
+            request,
+            "No tiene permisos para reabrir tickets.",
+        )
+        return redirect("home")
+
+    ticket = get_object_or_404(
+        Ticket.objects.select_related(
+            "cash_day",
+            "payment",
+        ),
+        id=ticket_id,
+    )
+
+    next_url = get_next_url(request)
+
+    if ticket.status != Ticket.PAID:
+        messages.error(
+            request,
+            "Solo se pueden reabrir tickets que ya fueron pagados.",
+        )
+        return redirect(next_url)
+
+    payment = getattr(ticket, "payment", None)
+
+    if request.method == "POST":
+        reason = request.POST.get("reason", "").strip()
+
+        if not reason:
+            messages.error(
+                request,
+                "Debe indicar el motivo de la reapertura.",
+            )
+            return render(
+                request,
+                "tickets/reopen_ticket_confirm.html",
+                {
+                    "ticket": ticket,
+                    "next_url": next_url,
+                },
+            )
+
+        old_values = {
+            "status": ticket.status,
+            "paid_at": str(ticket.paid_at),
+            "ticket_cash_day": (
+                str(ticket.cash_day.business_date)
+                if ticket.cash_day
+                else None
+            ),
+            "payment": None,
+        }
+
+        if payment:
+            old_values["payment"] = {
+                "id": payment.id,
+                "cash_day": str(payment.cash_day.business_date),
+                "method": payment.payment_method,
+                "amount": str(payment.amount),
+                "sinpe_reference": payment.sinpe_reference,
+                "received_by_employee": payment.received_by_employee.username,
+                "created_at": str(payment.created_at),
+            }
+
+            payment.delete()
+
+        if ticket.ticket_type == Ticket.WASH:
+            new_status = Ticket.PENDING_PAYMENT
+        else:
+            new_status = Ticket.ACTIVE
+
+        ticket.status = new_status
+        ticket.paid_at = None
+        ticket.updated_by_employee = request.user
+        ticket.save(
+            update_fields=[
+                "status",
+                "paid_at",
+                "updated_by_employee",
+                "updated_at",
+            ]
+        )
+
+        AuditLog.objects.create(
+            employee=request.user,
+            ticket=ticket,
+            action_type=AuditLog.REOPEN_TICKET,
+            entity_type="Ticket",
+            entity_id=str(ticket.id),
+            old_values=old_values,
+            new_values={
+                "status": ticket.status,
+                "paid_at": None,
+                "payment": None,
+                "message": "El ticket fue reabierto y el pago anterior fue removido de la caja.",
+            },
+            reason=reason,
+        )
+
+        messages.success(
+            request,
+            "Ticket reabierto correctamente. El pago anterior ya no cuenta en caja.",
+        )
+
+        return redirect(next_url)
+
+    return render(
+        request,
+        "tickets/reopen_ticket_confirm.html",
+        {
+            "ticket": ticket,
             "next_url": next_url,
         },
     )

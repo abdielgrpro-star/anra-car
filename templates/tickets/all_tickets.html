@@ -11,7 +11,6 @@
             Busca tickets por fecha, tipo, estado, placa, cliente o número de ticket.
         </p>
     </div>
-
 </div>
 
 <div class="card shadow-sm border-0 mb-3">
@@ -20,45 +19,61 @@
             <div class="card-body">
                 <div class="row g-3">
 
-                    <div class="col-md-3">
+                    <div class="col-lg-3 col-md-4 col-sm-6">
                         <label class="form-label">Fecha / Caja</label>
-                        <input type="date" name="date" value="{{ date }}" class="form-control">
+                        <input
+                            type="date"
+                            name="date"
+                            value="{{ date }}"
+                            class="form-control"
+                        >
                     </div>
 
-                    <div class="col-md-3">
+                    <div class="col-lg-3 col-md-4 col-sm-6">
                         <label class="form-label">Tipo</label>
+
                         <select name="ticket_type" class="form-select">
                             <option value="">Todos</option>
 
                             {% for value, label in ticket_type_choices %}
-                            <option value="{{ value }}" {% if ticket_type == value %}selected{% endif %}>
-                                {{ label }}
-                            </option>
+                                <option
+                                    value="{{ value }}"
+                                    {% if ticket_type == value %}selected{% endif %}
+                                >
+                                    {{ label }}
+                                </option>
                             {% endfor %}
                         </select>
                     </div>
 
-                    <div class="col-md-3">
+                    <div class="col-lg-3 col-md-4 col-sm-6">
                         <label class="form-label">Estado</label>
+
                         <select name="status" class="form-select">
                             <option value="">Todos</option>
 
                             {% for value, label in status_choices %}
-                            <option value="{{ value }}" {% if status == value %}selected{% endif %}>
-                                {{ label }}
-                            </option>
+                                <option
+                                    value="{{ value }}"
+                                    {% if status == value %}selected{% endif %}
+                                >
+                                    {{ label }}
+                                </option>
                             {% endfor %}
                         </select>
                     </div>
 
-                    <div class="col-md-3">
+                    <div class="col-lg-3 col-md-4 col-sm-6">
                         <label class="form-label">Empleado creador</label>
 
                         <select name="employee" class="form-select">
                             <option value="">Todos</option>
 
                             {% for employee in employees %}
-                                <option value="{{ employee.id }}" {% if employee_id == employee.id|stringformat:"s" %}selected{% endif %}>
+                                <option
+                                    value="{{ employee.id }}"
+                                    {% if employee_id == employee.id|stringformat:"s" %}selected{% endif %}
+                                >
                                     {{ employee.username }}
                                 </option>
                             {% empty %}
@@ -69,23 +84,38 @@
                         </select>
                     </div>
 
-                    <div class="col-md-3">
+                    <div class="col-lg-3 col-md-4 col-sm-6">
                         <label class="form-label">Hora desde</label>
-                        <input type="time" name="time_from" value="{{ time_from }}" class="form-control">
+                        <input
+                            type="time"
+                            name="time_from"
+                            value="{{ time_from }}"
+                            class="form-control"
+                        >
                     </div>
 
-                    <div class="col-md-3">
+                    <div class="col-lg-3 col-md-4 col-sm-6">
                         <label class="form-label">Hora hasta</label>
-                        <input type="time" name="time_to" value="{{ time_to }}" class="form-control">
+                        <input
+                            type="time"
+                            name="time_to"
+                            value="{{ time_to }}"
+                            class="form-control"
+                        >
                     </div>
 
-                    <div class="col-md-4">
+                    <div class="col-lg-4 col-md-6 col-sm-12">
                         <label class="form-label">Buscar</label>
-                        <input type="text" name="search" value="{{ search }}" class="form-control"
-                            placeholder="Ticket, placa, cliente o teléfono...">
+                        <input
+                            type="text"
+                            name="search"
+                            value="{{ search }}"
+                            class="form-control"
+                            placeholder="Ticket, placa, cliente o teléfono..."
+                        >
                     </div>
 
-                    <div class="col-md-2 d-flex align-items-end gap-2">
+                    <div class="col-lg-3 col-md-4 col-sm-6 d-flex align-items-end gap-2">
                         <button type="submit" class="btn btn-primary w-100">
                             Filtrar
                         </button>
@@ -105,300 +135,314 @@
     <div class="card-body">
 
         {% if tickets %}
-        <div class="table-responsive">
-            <table class="table table-hover align-middle">
-                <thead>
-                    <tr>
-                        <th>Ticket</th>
-                        <th>Tipo</th>
-                        <th>Estado</th>
-                        <th>Cliente</th>
-                        <th>Empleado</th>
-                        <th>Placa</th>
-                        <th>Caja</th>
-                        <th>Total</th>
-                        <th>Creado</th>
-                        <th>Pagado</th>
-                        <th class="text-end">Acciones</th>
-                    </tr>
-                </thead>
+            <div class="table-responsive ticket-table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>Acciones</th>
+                            <th>Ticket</th>
+                            <th>Tipo</th>
+                            <th>Estado</th>
+                            <th>Cliente</th>
+                            <th>Empleado</th>
+                            <th>Placa</th>
+                            <th>Caja</th>
+                            <th>Total</th>
+                            <th>Creado</th>
+                            <th>Pagado</th>
+                        </tr>
+                    </thead>
 
-                <tbody>
-                    {% for ticket in tickets %}
-                    <tr>
-                        <td>
-                            <strong>{{ ticket.ticket_number }}</strong>
-                        </td>
+                    <tbody>
+                        {% for ticket in tickets %}
+                            <tr>
+                                <td>
+                                    <div class="dropdown">
+                                        <button
+                                            class="btn btn-sm btn-outline-dark dropdown-toggle"
+                                            type="button"
+                                            data-bs-toggle="dropdown"
+                                            aria-expanded="false"
+                                        >
+                                            Acciones
+                                        </button>
 
-                        <td>
-                            {% if ticket.ticket_type == "wash" %}
-                            <span class="badge text-bg-info">Lavado</span>
-                            {% elif ticket.ticket_type == "parking" %}
-                            <span class="badge text-bg-primary">Parqueo</span>
-                            {% endif %}
-                        </td>
+                                        <ul class="dropdown-menu">
 
-                        <td>
-                            {% if ticket.status == "pending_payment" %}
-                            <span class="badge text-bg-warning">Pendiente</span>
-                            {% elif ticket.status == "active" %}
-                            <span class="badge text-bg-primary">Activo</span>
-                            {% elif ticket.status == "paid" %}
-                            <span class="badge text-bg-success">Pagado</span>
-                            {% elif ticket.status == "cancelled" %}
-                            <span class="badge text-bg-danger">Anulado</span>
-                            {% else %}
-                            <span class="badge text-bg-secondary">{{ ticket.get_status_display }}</span>
-                            {% endif %}
-                        </td>
+                                            {# ========================= #}
+                                            {# VER DETALLE #}
+                                            {# ========================= #}
 
-                        <td>
-                            {{ ticket.customer_name_snapshot|default:"No indicado" }}
-                            <br>
-                            <small class="text-muted">
-                                {{ ticket.customer_phone_snapshot|default:"Sin teléfono" }}
-                            </small>
-                        </td>
+                                            {% if ticket.ticket_type == "wash" %}
+                                                <li>
+                                                    <a
+                                                        class="dropdown-item"
+                                                        href="{% url 'tickets:wash_ticket_detail' ticket.id %}?next={{ request.get_full_path|urlencode }}"
+                                                    >
+                                                        Ver detalle
+                                                    </a>
+                                                </li>
+                                            {% elif ticket.ticket_type == "parking" %}
+                                                <li>
+                                                    <a
+                                                        class="dropdown-item"
+                                                        href="{% url 'tickets:parking_ticket_detail' ticket.id %}?next={{ request.get_full_path|urlencode }}"
+                                                    >
+                                                        Ver detalle
+                                                    </a>
+                                                </li>
+                                            {% endif %}
 
-                        <td>
-                            {{ ticket.created_by_employee.username }}
+                                            {# ========================= #}
+                                            {# IMPRIMIR / REIMPRIMIR #}
+                                            {# ========================= #}
 
-                            {% if ticket.created_by_employee.full_name %}
-                            <br>
-                            <small class="text-muted">
-                                {{ ticket.created_by_employee.full_name }}
-                            </small>
-                            {% endif %}
-                        </td>
+                                            {% if ticket.print_count == 0 %}
+                                                <li>
+                                                    <a
+                                                        class="dropdown-item"
+                                                        href="{% url 'tickets:print_ticket' ticket.id %}?next={{ request.get_full_path|urlencode }}"
+                                                    >
+                                                        Imprimir primera vez
+                                                    </a>
+                                                </li>
+                                            {% else %}
+                                                <li>
+                                                    <a
+                                                        class="dropdown-item"
+                                                        href="{% url 'tickets:reprint_ticket' ticket.id %}?next={{ request.get_full_path|urlencode }}"
+                                                    >
+                                                        Reimprimir
+                                                    </a>
+                                                </li>
+                                            {% endif %}
 
-                        <td>
-                            <span class="badge text-bg-dark">
-                                {{ ticket.vehicle_plate }}
-                            </span>
-                        </td>
+                                            {# ========================= #}
+                                            {# REABRIR TICKET PAGADO #}
+                                            {# ========================= #}
 
-                        <td>
-                            {{ ticket.cash_day.business_date|date:"d/m/Y" }}
-                            <br>
-                            <small class="text-muted">
-                                Caja #{{ ticket.cash_day.id }}
-                            </small>
-                        </td>
+                                            {% if ticket.status == "paid" %}
+                                                <li><hr class="dropdown-divider"></li>
 
-                        <td>
-                            <strong>₡{{ ticket.total_with_tax }}</strong>
-                        </td>
+                                                <li>
+                                                    <a
+                                                        class="dropdown-item text-warning"
+                                                        href="{% url 'tickets:reopen_ticket' ticket.id %}?next={{ request.get_full_path|urlencode }}"
+                                                    >
+                                                        Reabrir ticket
+                                                    </a>
+                                                </li>
+                                            {% endif %}
 
-                        <td>
-                            {{ ticket.created_at|date:"d/m/Y H:i" }}
-                        </td>
+                                            {# ========================= #}
+                                            {# ACCIONES DE LAVADO #}
+                                            {# ========================= #}
 
-                        <td>
-                            {% if ticket.paid_at %}
-                            {{ ticket.paid_at|date:"d/m/Y H:i" }}
-                            {% else %}
-                            <span class="text-muted">No pagado</span>
-                            {% endif %}
-                        </td>
+                                            {% if ticket.ticket_type == "wash" and ticket.status == "pending_payment" %}
+                                                <li><hr class="dropdown-divider"></li>
 
-                        <td>
-                            <div class="dropdown">
-                                <button
-                                    class="btn btn-sm btn-outline-dark dropdown-toggle"
-                                    type="button"
-                                    data-bs-toggle="dropdown"
-                                    aria-expanded="false"
-                                >
-                                    Acciones
-                                </button>
+                                                <li>
+                                                    <a
+                                                        class="dropdown-item"
+                                                        href="{% url 'tickets:charge_wash_ticket' ticket.id %}?next={{ request.get_full_path|urlencode }}"
+                                                    >
+                                                        Cobrar con código
+                                                    </a>
+                                                </li>
 
-                                <ul class="dropdown-menu dropdown-menu-end">
+                                                <li>
+                                                    <a
+                                                        class="dropdown-item"
+                                                        href="{% url 'tickets:charge_wash_without_code' ticket.id %}?next={{ request.get_full_path|urlencode }}"
+                                                    >
+                                                        Cobrar sin código
+                                                    </a>
+                                                </li>
 
-                                    {# ========================= #}
-                                    {# VER DETALLE #}
-                                    {# ========================= #}
+                                                <li>
+                                                    <a
+                                                        class="dropdown-item"
+                                                        href="{% url 'tickets:edit_wash_ticket' ticket.id %}?next={{ request.get_full_path|urlencode }}"
+                                                    >
+                                                        Editar ticket
+                                                    </a>
+                                                </li>
 
+                                                <li>
+                                                    <a
+                                                        class="dropdown-item"
+                                                        href="{% url 'tickets:apply_discount' ticket.id %}?next={{ request.get_full_path|urlencode }}"
+                                                    >
+                                                        {% if ticket.discount_amount > 0 %}
+                                                            Editar descuento
+                                                        {% else %}
+                                                            Aplicar descuento
+                                                        {% endif %}
+                                                    </a>
+                                                </li>
+                                            {% endif %}
+
+                                            {# ========================= #}
+                                            {# ACCIONES DE PARQUEO #}
+                                            {# ========================= #}
+
+                                            {% if ticket.ticket_type == "parking" and ticket.status == "active" %}
+                                                <li><hr class="dropdown-divider"></li>
+
+                                                <li>
+                                                    <a
+                                                        class="dropdown-item"
+                                                        href="{% url 'tickets:charge_parking_ticket' ticket.id %}?next={{ request.get_full_path|urlencode }}"
+                                                    >
+                                                        Cobrar con código
+                                                    </a>
+                                                </li>
+
+                                                <li>
+                                                    <a
+                                                        class="dropdown-item"
+                                                        href="{% url 'tickets:charge_parking_without_code' ticket.id %}?next={{ request.get_full_path|urlencode }}"
+                                                    >
+                                                        Cobrar sin código
+                                                    </a>
+                                                </li>
+
+                                                <li>
+                                                    <a
+                                                        class="dropdown-item"
+                                                        href="{% url 'tickets:edit_parking_ticket' ticket.id %}?next={{ request.get_full_path|urlencode }}"
+                                                    >
+                                                        Editar ticket
+                                                    </a>
+                                                </li>
+
+                                                <li>
+                                                    <a
+                                                        class="dropdown-item"
+                                                        href="{% url 'tickets:apply_discount' ticket.id %}?next={{ request.get_full_path|urlencode }}"
+                                                    >
+                                                        {% if ticket.discount_amount > 0 %}
+                                                            Editar descuento
+                                                        {% else %}
+                                                            Aplicar descuento
+                                                        {% endif %}
+                                                    </a>
+                                                </li>
+                                            {% endif %}
+
+                                            {# ========================= #}
+                                            {# ANULAR TICKET #}
+                                            {# ========================= #}
+
+                                            {% if ticket.status == "pending_payment" or ticket.status == "active" %}
+                                                <li><hr class="dropdown-divider"></li>
+
+                                                <li>
+                                                    <a
+                                                        class="dropdown-item text-danger"
+                                                        href="{% url 'tickets:cancel_ticket' ticket.id %}?next={{ request.get_full_path|urlencode }}"
+                                                    >
+                                                        Anular ticket
+                                                    </a>
+                                                </li>
+                                            {% endif %}
+
+                                        </ul>
+                                    </div>
+                                </td>
+
+                                <td>
+                                    <strong>{{ ticket.ticket_number }}</strong>
+                                </td>
+
+                                <td>
                                     {% if ticket.ticket_type == "wash" %}
-                                        <li>
-                                            <a
-                                                class="dropdown-item"
-                                                href="{% url 'tickets:wash_ticket_detail' ticket.id %}?next={{ request.get_full_path|urlencode }}"
-                                            >
-                                                Ver detalle
-                                            </a>
-                                        </li>
+                                        <span class="badge text-bg-info">Lavado</span>
                                     {% elif ticket.ticket_type == "parking" %}
-                                        <li>
-                                            <a
-                                                class="dropdown-item"
-                                                href="{% url 'tickets:parking_ticket_detail' ticket.id %}?next={{ request.get_full_path|urlencode }}"
-                                            >
-                                                Ver detalle
-                                            </a>
-                                        </li>
-                                    {% endif %}
-
-
-                                    {# ========================= #}
-                                    {# IMPRIMIR / REIMPRIMIR #}
-                                    {# ========================= #}
-
-                                    {% if ticket.print_count == 0 %}
-                                        <li>
-                                            <a
-                                                class="dropdown-item"
-                                                href="{% url 'tickets:print_ticket' ticket.id %}?next={{ request.get_full_path|urlencode }}"
-                                            >
-                                                Imprimir primera vez
-                                            </a>
-                                        </li>
+                                        <span class="badge text-bg-primary">Parqueo</span>
                                     {% else %}
-                                        <li>
-                                            <a
-                                                class="dropdown-item"
-                                                href="{% url 'tickets:reprint_ticket' ticket.id %}?next={{ request.get_full_path|urlencode }}"
-                                            >
-                                                Reimprimir
-                                            </a>
-                                        </li>
+                                        <span class="badge text-bg-secondary">{{ ticket.get_ticket_type_display }}</span>
                                     {% endif %}
+                                </td>
 
-
-                                    {# ========================= #}
-                                    {# ACCIONES DE LAVADO #}
-                                    {# ========================= #}
-
-                                    {% if ticket.ticket_type == "wash" and ticket.status == "pending_payment" %}
-                                        <li><hr class="dropdown-divider"></li>
-
-                                        <li>
-                                            <a
-                                                class="dropdown-item"
-                                                href="{% url 'tickets:charge_wash_ticket' ticket.id %}?next={{ request.get_full_path|urlencode }}"
-                                            >
-                                                Cobrar con código
-                                            </a>
-                                        </li>
-
-                                        <li>
-                                            <a
-                                                class="dropdown-item"
-                                                href="{% url 'tickets:charge_wash_without_code' ticket.id %}?next={{ request.get_full_path|urlencode }}"
-                                            >
-                                                Cobrar sin código
-                                            </a>
-                                        </li>
-
-                                        <li>
-                                            <a
-                                                class="dropdown-item"
-                                                href="{% url 'tickets:edit_wash_ticket' ticket.id %}?next={{ request.get_full_path|urlencode }}"
-                                            >
-                                                Editar ticket
-                                            </a>
-                                        </li>
-
-                                        <li>
-                                            <a
-                                                class="dropdown-item"
-                                                href="{% url 'tickets:apply_discount' ticket.id %}?next={{ request.get_full_path|urlencode }}"
-                                            >
-                                                {% if ticket.discount_amount > 0 %}
-                                                    Editar descuento
-                                                {% else %}
-                                                    Aplicar descuento
-                                                {% endif %}
-                                            </a>
-                                        </li>
+                                <td>
+                                    {% if ticket.status == "pending_payment" %}
+                                        <span class="badge text-bg-warning">Pendiente</span>
+                                    {% elif ticket.status == "active" %}
+                                        <span class="badge text-bg-primary">Activo</span>
+                                    {% elif ticket.status == "paid" %}
+                                        <span class="badge text-bg-success">Pagado</span>
+                                    {% elif ticket.status == "cancelled" %}
+                                        <span class="badge text-bg-danger">Anulado</span>
+                                    {% else %}
+                                        <span class="badge text-bg-secondary">{{ ticket.get_status_display }}</span>
                                     {% endif %}
+                                </td>
 
+                                <td>
+                                    {{ ticket.customer_name_snapshot|default:"No indicado" }}
+                                    <br>
+                                    <small class="text-muted">
+                                        {{ ticket.customer_phone_snapshot|default:"Sin teléfono" }}
+                                    </small>
+                                </td>
 
-                                    {# ========================= #}
-                                    {# ACCIONES DE PARQUEO #}
-                                    {# ========================= #}
+                                <td>
+                                    {{ ticket.created_by_employee.username }}
 
-                                    {% if ticket.ticket_type == "parking" and ticket.status == "active" %}
-                                        <li><hr class="dropdown-divider"></li>
-
-                                        <li>
-                                            <a
-                                                class="dropdown-item"
-                                                href="{% url 'tickets:charge_parking_ticket' ticket.id %}?next={{ request.get_full_path|urlencode }}"
-                                            >
-                                                Cobrar con código
-                                            </a>
-                                        </li>
-
-                                        <li>
-                                            <a
-                                                class="dropdown-item"
-                                                href="{% url 'tickets:charge_parking_without_code' ticket.id %}?next={{ request.get_full_path|urlencode }}"
-                                            >
-                                                Cobrar sin código
-                                            </a>
-                                        </li>
-
-                                        <li>
-                                            <a
-                                                class="dropdown-item"
-                                                href="{% url 'tickets:edit_parking_ticket' ticket.id %}?next={{ request.get_full_path|urlencode }}"
-                                            >
-                                                Editar ticket
-                                            </a>
-                                        </li>
-
-                                        <li>
-                                            <a
-                                                class="dropdown-item"
-                                                href="{% url 'tickets:apply_discount' ticket.id %}?next={{ request.get_full_path|urlencode }}"
-                                            >
-                                                {% if ticket.discount_amount > 0 %}
-                                                    Editar descuento
-                                                {% else %}
-                                                    Aplicar descuento
-                                                {% endif %}
-                                            </a>
-                                        </li>
+                                    {% if ticket.created_by_employee.full_name %}
+                                        <br>
+                                        <small class="text-muted">
+                                            {{ ticket.created_by_employee.full_name }}
+                                        </small>
                                     {% endif %}
+                                </td>
 
+                                <td>
+                                    <span class="badge text-bg-dark">
+                                        {{ ticket.vehicle_plate }}
+                                    </span>
+                                </td>
 
-                                    {# ========================= #}
-                                    {# ANULAR TICKET #}
-                                    {# ========================= #}
+                                <td>
+                                    {{ ticket.cash_day.business_date|date:"d/m/Y" }}
+                                    <br>
+                                    <small class="text-muted">
+                                        Caja #{{ ticket.cash_day.id }}
+                                    </small>
+                                </td>
 
-                                    {% if ticket.status == "pending_payment" or ticket.status == "active" %}
-                                        <li><hr class="dropdown-divider"></li>
+                                <td>
+                                    <strong>₡{{ ticket.total_with_tax }}</strong>
+                                </td>
 
-                                        <li>
-                                            <a
-                                                class="dropdown-item text-danger"
-                                                href="{% url 'tickets:cancel_ticket' ticket.id %}?next={{ request.get_full_path|urlencode }}"
-                                            >
-                                                Anular ticket
-                                            </a>
-                                        </li>
+                                <td>
+                                    {{ ticket.created_at|date:"d/m/Y H:i" }}
+                                </td>
+
+                                <td>
+                                    {% if ticket.paid_at %}
+                                        {{ ticket.paid_at|date:"d/m/Y H:i" }}
+                                    {% else %}
+                                        <span class="text-muted">No pagado</span>
                                     {% endif %}
-
-                                </ul>
-                            </div>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-
-            </table>
-        </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         {% else %}
-        <div class="text-center py-5">
-            <h5 class="fw-bold">No se encontraron tickets</h5>
-            <p class="text-muted mb-3">
-                Prueba cambiando los filtros o limpiando la búsqueda.
-            </p>
+            <div class="text-center py-5">
+                <h5 class="fw-bold">No se encontraron tickets</h5>
+                <p class="text-muted mb-3">
+                    Prueba cambiando los filtros o limpiando la búsqueda.
+                </p>
 
-            <a href="{% url 'tickets:all_tickets' %}" class="btn btn-outline-secondary">
-                Limpiar filtros
-            </a>
-        </div>
+                <a href="{% url 'tickets:all_tickets' %}" class="btn btn-outline-secondary">
+                    Limpiar filtros
+                </a>
+            </div>
         {% endif %}
 
     </div>

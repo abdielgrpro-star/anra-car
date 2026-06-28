@@ -5,75 +5,295 @@
 {% block content %}
 
 <div class="row mb-4">
-    <div class="col">
-        <h1 class="h3 fw-bold">Panel principal</h1>
-        <p class="text-muted">
-            Sistema local para gestión de lavados, parqueo, pagos y caja diaria.
-        </p>
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm bg-dark text-white">
+            <div class="card-body p-4">
+                <div class="d-flex flex-column flex-md-row justify-content-between gap-3">
+                    <div>
+                        <h1 class="h3 fw-bold mb-2">
+                            Panel principal
+                        </h1>
+
+                        <p class="mb-0 text-white-50">
+                            Sistema local para gestión de lavados, parqueo, pagos y caja diaria.
+                        </p>
+                    </div>
+
+                    <div class="text-md-end">
+                        <div class="small text-white-50">
+                            Usuario activo
+                        </div>
+
+                        <div class="fw-bold">
+                            {{ request.user.username }}
+                        </div>
+
+                        {% if request.user.role %}
+                            <div class="small text-white-50">
+                                {{ request.user.role.name }}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4 mt-3 mt-lg-0">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body p-4">
+                <h5 class="fw-bold mb-2">
+                    Acciones rápidas
+                </h5>
+
+                <p class="text-muted small mb-3">
+                    Usa estas opciones para operar durante el día.
+                </p>
+
+                <div class="d-grid gap-2">
+                    <a href="{% url 'tickets:create_wash_ticket' %}" class="btn btn-primary">
+                        + Nuevo lavado
+                    </a>
+
+                    <a href="{% url 'tickets:create_parking_ticket' %}" class="btn btn-primary">
+                        + Nuevo parqueo
+                    </a>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
-<div class="row g-3">
+<div class="mb-3">
+    <h2 class="h5 fw-bold mb-1">
+        Operación diaria
+    </h2>
 
-    <div class="col-md-4">
-        <div class="card shadow-sm border-0 h-100">
-            <div class="card-body">
-                <h5 class="card-title">Crear lavado</h5>
-                <p class="card-text text-muted">
-                    Crear ticket de lavado con extras y total automático.
-                </p>
-                <a href="{% url 'tickets:create_wash_ticket' %}" class="btn btn-primary w-100">
+    <p class="text-muted mb-0">
+        Opciones principales para crear, buscar y gestionar tickets.
+    </p>
+</div>
+
+<div class="row g-3 mb-4">
+
+    <div class="col-lg-4 col-md-6 col-sm-12">
+        <div class="card shadow-sm border-0 h-100 dashboard-card">
+            <div class="card-body p-4">
+                <div class="d-flex align-items-start gap-3">
+                    <div class="dashboard-icon bg-primary-subtle text-primary">
+                        🚗
+                    </div>
+
+                    <div class="flex-grow-1">
+                        <h5 class="card-title fw-bold mb-2">
+                            Crear lavado
+                        </h5>
+
+                        <p class="card-text text-muted">
+                            Crear ticket de lavado con extras y total automático.
+                        </p>
+                    </div>
+                </div>
+
+                <a href="{% url 'tickets:create_wash_ticket' %}" class="btn btn-primary w-100 mt-3">
                     Nuevo lavado
                 </a>
             </div>
         </div>
     </div>
 
-    <div class="col-md-4">
-        <div class="card shadow-sm border-0 h-100">
-            <div class="card-body">
-                <h5 class="card-title">Crear parqueo</h5>
-                <p class="card-text text-muted">
-                    Registrar entrada de parqueo con hora automática.
-                </p>
-                <a href="{% url 'tickets:create_parking_ticket' %}" class="btn btn-primary w-100">
+    <div class="col-lg-4 col-md-6 col-sm-12">
+        <div class="card shadow-sm border-0 h-100 dashboard-card">
+            <div class="card-body p-4">
+                <div class="d-flex align-items-start gap-3">
+                    <div class="dashboard-icon bg-success-subtle text-success">
+                        🅿️
+                    </div>
+
+                    <div class="flex-grow-1">
+                        <h5 class="card-title fw-bold mb-2">
+                            Crear parqueo
+                        </h5>
+
+                        <p class="card-text text-muted">
+                            Registrar entrada de parqueo con hora automática.
+                        </p>
+                    </div>
+                </div>
+
+                <a href="{% url 'tickets:create_parking_ticket' %}" class="btn btn-primary w-100 mt-3">
                     Nuevo parqueo
                 </a>
             </div>
         </div>
     </div>
 
+    <div class="col-lg-4 col-md-6 col-sm-12">
+        <div class="card shadow-sm border-0 h-100 dashboard-card">
+            <div class="card-body p-4">
+                <div class="d-flex align-items-start gap-3">
+                    <div class="dashboard-icon bg-secondary-subtle text-secondary">
+                        🔎
+                    </div>
 
-    <div class="col-md-4">
-        <div class="card shadow-sm border-0 h-100">
-            <div class="card-body">
-                <h5 class="card-title">Todos los tickets</h5>
-                <p class="card-text text-muted">
-                    Buscar tickets por fecha, tipo, estado, placa o cliente.
-                </p>
-                <a href="{% url 'tickets:all_tickets' %}" class="btn btn-outline-dark w-100">
-                    Buscar tickets
+                    <div class="flex-grow-1">
+                        <h5 class="card-title fw-bold mb-2">
+                            Tickets
+                        </h5>
+
+                        <p class="card-text text-muted">
+                            Buscar tickets por fecha, estado, placa, cliente o número.
+                        </p>
+                    </div>
+                </div>
+
+                <a href="{% url 'tickets:all_tickets' %}" class="btn btn-outline-dark w-100 mt-3">
+                    Ver tickets
                 </a>
             </div>
         </div>
     </div>
 
-    {% if request.user.is_admin_user or request.user.is_technical_admin or request.user.is_superuser %}
-    <div class="col-md-4">
-        <div class="card shadow-sm border-0 h-100">
-            <div class="card-body">
-                <h5 class="card-title">Caja del día</h5>
+</div>
+
+{% if request.user.is_admin_user or request.user.is_technical_admin or request.user.is_superuser %}
+
+<div class="mb-3">
+    <h2 class="h5 fw-bold mb-1">
+        Administración
+    </h2>
+
+    <p class="text-muted mb-0">
+        Opciones disponibles solo para administradores.
+    </p>
+</div>
+
+<div class="row g-3">
+
+    <div class="col-lg-3 col-md-6 col-sm-12">
+        <div class="card shadow-sm border-0 h-100 dashboard-card">
+            <div class="card-body p-4">
+                <div class="dashboard-icon bg-warning-subtle text-warning mb-3">
+                    💵
+                </div>
+
+                <h5 class="card-title fw-bold">
+                    Caja del día
+                </h5>
+
                 <p class="card-text text-muted">
-                    Ver efectivo, SINPE y total general del día.
+                    Ver efectivo, SINPE, total general y pagos del día.
                 </p>
+
                 <a href="{% url 'cash:cash_day_detail' %}" class="btn btn-outline-dark w-100">
                     Ver caja
                 </a>
             </div>
         </div>
     </div>
-    {% endif %}
+
+    <div class="col-lg-3 col-md-6 col-sm-12">
+        <div class="card shadow-sm border-0 h-100 dashboard-card">
+            <div class="card-body p-4">
+                <div class="dashboard-icon bg-info-subtle text-info mb-3">
+                    📊
+                </div>
+
+                <h5 class="card-title fw-bold">
+                    Reporte de cajas
+                </h5>
+
+                <p class="card-text text-muted">
+                    Consultar ganancias por día o por rango de fechas.
+                </p>
+
+                <a href="{% url 'cash:cash_day_report_list' %}" class="btn btn-outline-dark w-100">
+                    Ver reportes
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-3 col-md-6 col-sm-12">
+        <div class="card shadow-sm border-0 h-100 dashboard-card">
+            <div class="card-body p-4">
+                <div class="dashboard-icon bg-danger-subtle text-danger mb-3">
+                    🧾
+                </div>
+
+                <h5 class="card-title fw-bold">
+                    Auditoría
+                </h5>
+
+                <p class="card-text text-muted">
+                    Revisar acciones, OTP, motivos y cambios realizados.
+                </p>
+
+                <a href="{% url 'audit:audit_log_list' %}" class="btn btn-outline-dark w-100">
+                    Ver auditoría
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-3 col-md-6 col-sm-12">
+        <div class="card shadow-sm border-0 h-100 dashboard-card">
+            <div class="card-body p-4">
+                <div class="dashboard-icon bg-dark-subtle text-dark mb-3">
+                    ⚙️
+                </div>
+
+                <h5 class="card-title fw-bold">
+                    Panel admin
+                </h5>
+
+                <p class="card-text text-muted">
+                    Administrar usuarios, servicios, extras y configuración.
+                </p>
+
+                <a href="/admin/" class="btn btn-outline-dark w-100">
+                    Abrir admin
+                </a>
+            </div>
+        </div>
+    </div>
 
 </div>
+
+{% endif %}
+
+<style>
+    .dashboard-card {
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .dashboard-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.10) !important;
+    }
+
+    .dashboard-icon {
+        width: 46px;
+        height: 46px;
+        border-radius: 0.9rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.4rem;
+        flex-shrink: 0;
+    }
+
+    @media (max-width: 1100px) {
+        .card-body {
+            padding: 1rem !important;
+        }
+
+        .dashboard-icon {
+            width: 40px;
+            height: 40px;
+            font-size: 1.15rem;
+        }
+    }
+</style>
 
 {% endblock %}

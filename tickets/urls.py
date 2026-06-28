@@ -10,6 +10,7 @@ urlpatterns = [
     path("<int:ticket_id>/print/", views.print_ticket, name="print_ticket"),
     path("<int:ticket_id>/reprint/", views.reprint_ticket, name="reprint_ticket"),
     path("<int:ticket_id>/discount/", views.apply_discount, name="apply_discount"),
+    path("<int:ticket_id>/reopen/", views.reopen_ticket, name="reopen_ticket",),
 
     path("wash/create/", views.create_wash_ticket, name="create_wash_ticket"),
     path("wash/<int:ticket_id>/edit/", views.edit_wash_ticket, name="edit_wash_ticket"),
