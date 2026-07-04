@@ -67,16 +67,8 @@
                 <h5 class="fw-bold">Tarifa</h5>
 
                 <p class="mb-1">
-                    Primera hora: <strong>₡{{ ticket.parking_first_hour_price_snapshot }}</strong>
+                    Cobro por hora: <strong>₡{{ ticket.parking_first_hour_price_snapshot }}</strong>
                 </p>
-
-                <p class="mb-1">
-                    Después de la primera hora:
-                    <strong>₡{{ ticket.parking_block_price_snapshot }}</strong>
-                    por cada bloque iniciado de
-                    <strong>{{ ticket.parking_block_minutes_snapshot }} minutos</strong>.
-                </p>
-
                 <hr>
 
                 {% if ticket.parking_exit_at %}

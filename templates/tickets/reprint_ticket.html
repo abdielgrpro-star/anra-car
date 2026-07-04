@@ -11,14 +11,18 @@
             <div>
                 <h1 class="h3 fw-bold mb-1">Reimprimir ticket</h1>
                 <p class="text-muted mb-0">
-                    Esta acción requiere autorización OTP y quedará registrada en auditoría.
+                    Esta acción puede requerir autorización OTP y quedará registrada en auditoría.
                 </p>
             </div>
+
+            <a href="{{ next_url }}" class="btn btn-outline-secondary">
+                ← Ir a tickets
+            </a>
         </div>
 
         <div class="alert alert-warning">
             Este ticket ya fue impreso {{ ticket.print_count }} vez/veces.
-            La reimpresión quedará registrada en auditoría.
+            Si autoriza la reimpresión, el ticket se enviará directamente a la impresora térmica.
         </div>
 
         <div class="card shadow-sm border-0 mb-3">
@@ -48,10 +52,17 @@
                 </p>
 
                 {% if ticket.last_printed_at %}
-                <p class="mb-1">
-                    <strong>Última impresión:</strong>
-                    {{ ticket.last_printed_at|date:"d/m/Y H:i" }}
-                </p>
+                    <p class="mb-1">
+                        <strong>Última impresión:</strong>
+                        {{ ticket.last_printed_at|date:"d/m/Y H:i" }}
+                    </p>
+                {% endif %}
+
+                {% if ticket.last_printed_by_employee %}
+                    <p class="mb-1">
+                        <strong>Última impresión por:</strong>
+                        {{ ticket.last_printed_by_employee.username }}
+                    </p>
                 {% endif %}
             </div>
         </div>
@@ -61,47 +72,54 @@
             <input type="hidden" name="next" value="{{ next_url }}">
 
             <div class="card-body">
-                <h5 class="card-title mb-3">Autorización</h5>
+                <h5 class="card-title mb-3">Autorización de reimpresión</h5>
 
                 {% if form.authorized_by_employee %}
-                <div class="mb-3">
-                    <label class="form-label">{{ form.authorized_by_employee.label }}</label>
-                    {{ form.authorized_by_employee }}
-                    {{ form.authorized_by_employee.errors }}
-                </div>
+                    <div class="mb-3">
+                        <label class="form-label">
+                            {{ form.authorized_by_employee.label }}
+                        </label>
+                        {{ form.authorized_by_employee }}
+                        {{ form.authorized_by_employee.errors }}
+                    </div>
                 {% endif %}
 
                 {% if form.otp_code %}
-                <div class="mb-3">
-                    <label class="form-label">{{ form.otp_code.label }}</label>
-                    {{ form.otp_code }}
-                    {{ form.otp_code.errors }}
-                </div>
+                    <div class="mb-3">
+                        <label class="form-label">
+                            {{ form.otp_code.label }}
+                        </label>
+                        {{ form.otp_code }}
+                        {{ form.otp_code.errors }}
+                    </div>
                 {% endif %}
 
                 <div class="mb-3">
-                    <label class="form-label">{{ form.reason.label }}</label>
+                    <label class="form-label">
+                        {{ form.reason.label }}
+                    </label>
                     {{ form.reason }}
+
                     <div class="form-text">
-                        Ejemplo: el ticket se dañó, cliente lo perdió, error de impresión, etc.
+                        Ejemplo: el ticket se dañó, el cliente lo perdió, hubo error de impresión, etc.
                     </div>
+
                     {{ form.reason.errors }}
+                </div>
+
+                <div class="alert alert-info mb-0">
+                    Al presionar <strong>Autorizar e imprimir</strong>, el sistema enviará el ticket
+                    directamente a la impresora térmica configurada.
                 </div>
             </div>
 
             <div class="card-footer bg-white d-flex justify-content-end gap-2">
-                {% if ticket.ticket_type == "wash" %}
                 <a href="{{ next_url }}" class="btn btn-outline-secondary">
-                    ← Ir a tickets
+                    Cancelar
                 </a>
-                {% elif ticket.ticket_type == "parking" %}
-                <a href="{{ next_url }}" class="btn btn-outline-secondary">
-                    ← Ir a tickets
-                </a>
-                {% endif %}
 
                 <button type="submit" class="btn btn-warning">
-                    Autorizar reimpresión
+                    Autorizar e imprimir
                 </button>
             </div>
         </form>

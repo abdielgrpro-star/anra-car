@@ -9,6 +9,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.urls import reverse
 from tickets.utils import calculate_parking_total, calculate_current_parking_total
+from tickets.thermal_printer import print_ticket as print_thermal_ticket
 
 from audit.models import AuditLog, OtpUsage
 from accounts.permissions import user_can_authorize_sensitive_actions
@@ -42,7 +43,6 @@ from tickets.utils import (
     generate_closing_code,
     generate_ticket_number,
 )
-
 
 
 def get_next_url(request, default_url_name="tickets:all_tickets"):
@@ -228,8 +228,8 @@ def create_parking_ticket(request):
             )
 
             first_hour_price = Decimal("1000.00")
-            block_price = Decimal("500.00")
-            block_minutes = 30
+            block_price = Decimal("1000.00")
+            block_minutes = 60
 
             tax_data = calculate_tax_from_total(
                 total_with_tax=first_hour_price,
@@ -355,10 +355,9 @@ def parking_ticket_detail(request, ticket_id):
 
         block_price = (
             ticket.parking_block_price_snapshot
-            or Decimal("500.00")
+            or Decimal("1000.00")
         )
-
-        block_minutes = ticket.parking_block_minutes_snapshot or 30
+        block_minutes = ticket.parking_block_minutes_snapshot or 60
 
         if parking_current_minutes <= 60:
             parking_current_total = first_hour_price
@@ -1252,10 +1251,9 @@ def all_tickets(request):
 
             block_price = (
                 ticket.parking_block_price_snapshot
-                or Decimal("500.00")
+                or Decimal("1000.00")
             )
-
-            block_minutes = ticket.parking_block_minutes_snapshot or 30
+            block_minutes = ticket.parking_block_minutes_snapshot or 60
 
             if parking_minutes <= 60:
                 parking_total = first_hour_price
@@ -1456,26 +1454,29 @@ def cancel_ticket(request, ticket_id):
 @transaction.atomic
 def print_ticket(request, ticket_id):
     next_url = get_next_url(request)
+
     ticket = get_object_or_404(
         Ticket.objects.select_related(
             "customer",
             "service",
             "cash_day",
             "created_by_employee",
+            "updated_by_employee",
             "last_printed_by_employee",
         ).prefetch_related("ticket_extras"),
         id=ticket_id,
     )
 
-    old_values = {
-        "print_count": ticket.print_count,
-        "last_printed_at": str(ticket.last_printed_at),
-        "last_printed_by_employee": (
-            ticket.last_printed_by_employee.username
-            if ticket.last_printed_by_employee
-            else None
-        ),
-    }
+    try:
+        print_thermal_ticket(ticket)
+
+    except Exception as error:
+        messages.error(
+            request,
+            f"No se pudo imprimir el ticket: {error}",
+        )
+
+        return redirect(next_url)
 
     ticket.print_count += 1
     ticket.last_printed_at = timezone.now()
@@ -1492,36 +1493,19 @@ def print_ticket(request, ticket_id):
         ]
     )
 
-    AuditLog.objects.create(
-        employee=request.user,
-        ticket=ticket,
-        action_type=AuditLog.REPRINT_TICKET if ticket.print_count > 1 else AuditLog.REPRINT_TICKET,
-        entity_type="Ticket",
-        entity_id=ticket.id,
-        old_values=old_values,
-        new_values={
-            "print_count": ticket.print_count,
-            "last_printed_at": str(ticket.last_printed_at),
-            "last_printed_by_employee": request.user.username,
-            "print_type": "first_print" if ticket.print_count == 1 else "reprint",
-        },
-        reason="Primera impresión" if ticket.print_count == 1 else "Reimpresión autorizada",
+    messages.success(
+        request,
+        f"Ticket {ticket.ticket_number} impreso correctamente.",
     )
 
-    return render(
-        request,
-        "tickets/print_ticket.html",
-        {
-            "ticket": ticket,
-            "next_url": next_url,
-        },
-    )
+    return redirect(next_url)
 
 # reimprimir tickets despues de 1ra vez
 @login_required
 @transaction.atomic
 def reprint_ticket(request, ticket_id):
     next_url = get_next_url(request)
+
     ticket = get_object_or_404(
         Ticket.objects.select_related(
             "customer",
@@ -1535,7 +1519,8 @@ def reprint_ticket(request, ticket_id):
 
     # Si nunca se ha impreso, la primera impresión no requiere OTP.
     if ticket.print_count == 0:
-        return redirect("tickets:print_ticket", ticket_id=ticket.id)
+        print_url = reverse("tickets:print_ticket", args=[ticket.id])
+        return redirect(f"{print_url}?next={next_url}")
 
     if request.method == "POST":
         form = ReprintTicketForm(
@@ -1613,6 +1598,46 @@ def reprint_ticket(request, ticket_id):
                 ),
             }
 
+            try:
+                print_thermal_ticket(ticket)
+
+            except Exception as error:
+                messages.error(
+                    request,
+                    f"No se pudo reimprimir el ticket: {error}",
+                )
+
+                AuditLog.objects.create(
+                    employee=request.user,
+                    ticket=ticket,
+                    otp_usage=otp_usage,
+                    action_type=AuditLog.REPRINT_TICKET,
+                    entity_type="Ticket",
+                    entity_id=ticket.id,
+                    old_values=old_values,
+                    new_values={
+                        "attempt": "thermal_reprint_failed",
+                        "error": str(error),
+                        "authorized_by_employee": (
+                            final_authorizer.username
+                            if final_authorizer
+                            else None
+                        ),
+                        "used_otp": otp_usage is not None,
+                    },
+                    reason=reason,
+                )
+
+                return render(
+                    request,
+                    "tickets/reprint_ticket.html",
+                    {
+                        "ticket": ticket,
+                        "form": form,
+                        "next_url": next_url,
+                    },
+                )
+
             ticket.print_count += 1
             ticket.last_printed_at = timezone.now()
             ticket.last_printed_by_employee = request.user
@@ -1646,23 +1671,17 @@ def reprint_ticket(request, ticket_id):
                         else None
                     ),
                     "used_otp": otp_usage is not None,
+                    "print_method": "thermal_direct",
                 },
                 reason=reason,
             )
 
             messages.success(
                 request,
-                f"Reimpresión del ticket {ticket.ticket_number} autorizada.",
+                f"Reimpresión del ticket {ticket.ticket_number} realizada correctamente.",
             )
 
-            return render(
-                request,
-                "tickets/print_ticket.html",
-                {
-                    "ticket": ticket,
-                    "next_url": next_url,
-                },
-            )
+            return redirect(next_url)
 
     else:
         form = ReprintTicketForm(
@@ -2152,8 +2171,8 @@ def apply_discount(request, ticket_id):
             parking_current_minutes = 0
 
         first_hour_price = ticket.parking_first_hour_price_snapshot or Decimal("1000.00")
-        block_price = ticket.parking_block_price_snapshot or Decimal("500.00")
-        block_minutes = ticket.parking_block_minutes_snapshot or 30
+        block_price = ticket.parking_block_price_snapshot or Decimal("1000.00")
+        block_minutes = ticket.parking_block_minutes_snapshot or 60
 
         if parking_current_minutes <= 60:
             parking_current_total = first_hour_price
