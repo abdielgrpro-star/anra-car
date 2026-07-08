@@ -1,8 +1,8 @@
 import win32print
 from django.utils import timezone
+from django.conf import settings
 
-
-PRINTER_NAME = "SAT 22TUS"
+PRINTER_NAME = getattr(settings, "THERMAL_PRINTER_NAME", "SAT 22TUS")
 
 
 def send_raw_to_printer(raw_data, printer_name=PRINTER_NAME):
