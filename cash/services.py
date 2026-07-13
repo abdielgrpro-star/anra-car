@@ -6,8 +6,8 @@ from django.utils import timezone
 from cash.models import CashDay
 
 
-AUTO_OPEN_TIME = time(7, 0)
-AUTO_CLOSE_TIME = time(20, 0)
+AUTO_OPEN_TIME = time(8, 0)
+AUTO_CLOSE_TIME = time(22, 0)
 
 
 def is_after_auto_close_time():

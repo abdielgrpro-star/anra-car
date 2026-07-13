@@ -4,152 +4,222 @@
 
 {% block content %}
 
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
     <div>
         <h1 class="h3 fw-bold mb-1">Todos los tickets</h1>
         <p class="text-muted mb-0">
-            Busca tickets por fecha, tipo, estado, placa, cliente o número de ticket.
+            Busca y gestiona tickets de lavado, parqueo por horas y parqueo prepago.
         </p>
+    </div>
+
+    <div class="text-md-end">
+        <span class="badge text-bg-light border">
+            Máximo {{ result_limit }} resultados
+        </span>
     </div>
 </div>
 
 <div class="card shadow-sm border-0 mb-3">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <div class="fw-bold">
+            Filtros
+        </div>
+
+        <a href="{% url 'tickets:all_tickets' %}" class="btn btn-sm btn-danger">
+            Limpiar filtros
+        </a>
+    </div>
+
     <div class="card-body">
-        <form method="get" class="card shadow-sm border-0 mb-4">
-            <div class="card-body">
-                <div class="row g-3">
+        <form method="get">
+            <div class="row g-3">
 
-                    <div class="col-lg-3 col-md-4 col-sm-6">
-                        <label class="form-label">Fecha / Caja</label>
-                        <input
-                            type="date"
-                            name="date"
-                            value="{{ date }}"
-                            class="form-control"
-                        >
+                <div class="col-lg-3 col-md-4 col-sm-6">
+                    <label class="form-label">Fecha / Caja</label>
+                    <input
+                        type="date"
+                        name="date"
+                        value="{{ date }}"
+                        class="form-control"
+                    >
+                    <div class="form-text">
+                        Día operativo de caja.
                     </div>
-
-                    <div class="col-lg-3 col-md-4 col-sm-6">
-                        <label class="form-label">Tipo</label>
-
-                        <select name="ticket_type" class="form-select">
-                            <option value="">Todos</option>
-
-                            {% for value, label in ticket_type_choices %}
-                                <option
-                                    value="{{ value }}"
-                                    {% if ticket_type == value %}selected{% endif %}
-                                >
-                                    {{ label }}
-                                </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-
-                    <div class="col-lg-3 col-md-4 col-sm-6">
-                        <label class="form-label">Estado</label>
-
-                        <select name="status" class="form-select">
-                            <option value="">Todos</option>
-
-                            {% for value, label in status_choices %}
-                                <option
-                                    value="{{ value }}"
-                                    {% if status == value %}selected{% endif %}
-                                >
-                                    {{ label }}
-                                </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-
-                    <div class="col-lg-3 col-md-4 col-sm-6">
-                        <label class="form-label">Empleado creador</label>
-
-                        <select name="employee" class="form-select">
-                            <option value="">Todos</option>
-
-                            {% for employee in employees %}
-                                <option
-                                    value="{{ employee.id }}"
-                                    {% if employee_id == employee.id|stringformat:"s" %}selected{% endif %}
-                                >
-                                    {{ employee.username }}
-                                </option>
-                            {% empty %}
-                                <option value="" disabled>
-                                    No hay empleados disponibles
-                                </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-
-                    <div class="col-lg-3 col-md-4 col-sm-6">
-                        <label class="form-label">Hora desde</label>
-                        <input
-                            type="time"
-                            name="time_from"
-                            value="{{ time_from }}"
-                            class="form-control"
-                        >
-                    </div>
-
-                    <div class="col-lg-3 col-md-4 col-sm-6">
-                        <label class="form-label">Hora hasta</label>
-                        <input
-                            type="time"
-                            name="time_to"
-                            value="{{ time_to }}"
-                            class="form-control"
-                        >
-                    </div>
-
-                    <div class="col-lg-4 col-md-6 col-sm-12">
-                        <label class="form-label">Buscar</label>
-                        <input
-                            type="text"
-                            name="search"
-                            value="{{ search }}"
-                            class="form-control"
-                            placeholder="Ticket, placa, cliente o teléfono..."
-                        >
-                    </div>
-
-                    <div class="col-lg-3 col-md-4 col-sm-6 d-flex align-items-end gap-2">
-                        <button type="submit" class="btn btn-primary w-100">
-                            Filtrar
-                        </button>
-
-                        <a href="{% url 'tickets:all_tickets' %}" class="btn btn-outline-secondary">
-                            Limpiar
-                        </a>
-                    </div>
-
                 </div>
+
+                <div class="col-lg-3 col-md-4 col-sm-6">
+                    <label class="form-label">Tipo</label>
+                    <select name="ticket_type" class="form-select">
+                        <option value="">Todos</option>
+
+                        {% for value, label in ticket_type_choices %}
+                            <option
+                                value="{{ value }}"
+                                {% if ticket_type == value %}selected{% endif %}
+                            >
+                                {{ label }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-lg-3 col-md-4 col-sm-6">
+                    <label class="form-label">Modo parqueo</label>
+                    <select name="parking_mode" class="form-select">
+                        {% for value, label in parking_mode_choices %}
+                            <option
+                                value="{{ value }}"
+                                {% if parking_mode == value %}selected{% endif %}
+                            >
+                                {{ label }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                    <div class="form-text">
+                        Aplica solo para parqueo.
+                    </div>
+                </div>
+
+                <div class="col-lg-3 col-md-4 col-sm-6">
+                    <label class="form-label">Estado</label>
+                    <select name="status" class="form-select">
+                        <option value="">Todos</option>
+
+                        {% for value, label in status_choices %}
+                            <option
+                                value="{{ value }}"
+                                {% if status == value %}selected{% endif %}
+                            >
+                                {{ label }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-lg-3 col-md-4 col-sm-6">
+                    <label class="form-label">Empleado creador</label>
+                    <select name="employee" class="form-select">
+                        <option value="">Todos</option>
+
+                        {% for employee in employees %}
+                            <option
+                                value="{{ employee.id }}"
+                                {% if employee_id == employee.id|stringformat:"s" %}selected{% endif %}
+                            >
+                                {{ employee.username }}
+                            </option>
+                        {% empty %}
+                            <option value="" disabled>
+                                No hay empleados disponibles
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-lg-3 col-md-4 col-sm-6">
+                    <label class="form-label">Hora desde</label>
+                    <input
+                        type="time"
+                        name="time_from"
+                        value="{{ time_from }}"
+                        class="form-control"
+                    >
+                    <div class="form-text">
+                        Filtra por hora del día.
+                    </div>
+                </div>
+
+                <div class="col-lg-3 col-md-4 col-sm-6">
+                    <label class="form-label">Hora hasta</label>
+                    <input
+                        type="time"
+                        name="time_to"
+                        value="{{ time_to }}"
+                        class="form-control"
+                    >
+                    <div class="form-text">
+                        Filtra por hora del día.
+                    </div>
+                </div>
+
+                <div class="col-lg-3 col-md-4 col-sm-6">
+                    <label class="form-label">Creado desde</label>
+                    <input
+                        type="datetime-local"
+                        name="created_from"
+                        value="{{ created_from }}"
+                        class="form-control"
+                    >
+                    <div class="form-text">
+                        Fecha y hora exacta.
+                    </div>
+                </div>
+
+                <div class="col-lg-3 col-md-4 col-sm-6">
+                    <label class="form-label">Creado hasta</label>
+                    <input
+                        type="datetime-local"
+                        name="created_to"
+                        value="{{ created_to }}"
+                        class="form-control"
+                    >
+                    <div class="form-text">
+                        Fecha y hora exacta.
+                    </div>
+                </div>
+
+                <div class="col-lg-6 col-md-8 col-sm-12">
+                    <label class="form-label">Buscar</label>
+                    <input
+                        type="text"
+                        name="search"
+                        value="{{ search }}"
+                        class="form-control"
+                        placeholder="Ticket, placa, cliente, teléfono, servicio o plan prepago..."
+                    >
+                </div>
+
+                <div class="col-lg-3 col-md-4 col-sm-12 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        Filtrar tickets
+                    </button>
+                </div>
+
             </div>
         </form>
     </div>
 </div>
 
 <div class="card shadow-sm border-0">
-    <div class="card-body">
+    <div class="card-header bg-white d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+        <div>
+            <strong>Resultados</strong>
+            <span class="text-muted small">
+                {% if tickets %}
+                    — mostrando hasta {{ result_limit }} tickets
+                {% endif %}
+            </span>
+        </div>
+
+        <div class="small text-muted">
+            Ordenado por creación más reciente
+        </div>
+    </div>
+
+    <div class="card-body p-0">
 
         {% if tickets %}
             <div class="table-responsive ticket-table-responsive">
-                <table class="table table-hover align-middle">
-                    <thead>
+                <table class="table table-hover align-middle mb-0 tickets-table">
+                    <thead class="table-light">
                         <tr>
-                            <th>Acciones</th>
+                            <th class="actions-col">Acciones</th>
                             <th>Ticket</th>
-                            <th>Tipo</th>
-                            <th>Estado</th>
-                            <th>Cliente</th>
-                            <th>Empleado</th>
-                            <th>Placa</th>
-                            <th>Caja</th>
-                            <th>Total</th>
-                            <th>Creado</th>
-                            <th>Pagado</th>
+                            <th>Tipo / Estado</th>
+                            <th>Cliente / Placa</th>
+                            <th>Caja / Empleado</th>
+                            <th class="text-end">Total</th>
+                            <th>Fechas</th>
                         </tr>
                     </thead>
 
@@ -218,23 +288,6 @@
                                             {% endif %}
 
                                             {# ========================= #}
-                                            {# REABRIR TICKET PAGADO #}
-                                            {# ========================= #}
-
-                                            {% if ticket.status == "paid" %}
-                                                <li><hr class="dropdown-divider"></li>
-
-                                                <li>
-                                                    <a
-                                                        class="dropdown-item text-warning"
-                                                        href="{% url 'tickets:reopen_ticket' ticket.id %}?next={{ request.get_full_path|urlencode }}"
-                                                    >
-                                                        Reabrir ticket
-                                                    </a>
-                                                </li>
-                                            {% endif %}
-
-                                            {# ========================= #}
                                             {# ACCIONES DE LAVADO #}
                                             {# ========================= #}
 
@@ -286,46 +339,110 @@
                                             {# ACCIONES DE PARQUEO #}
                                             {# ========================= #}
 
-                                            {% if ticket.ticket_type == "parking" and ticket.status == "active" %}
+                                            {% if ticket.ticket_type == "parking" %}
+
+                                                {% if ticket.parking_mode == "prepaid" and ticket.status == "pending_payment" %}
+                                                    <li><hr class="dropdown-divider"></li>
+
+                                                    <li>
+                                                        <a
+                                                            class="dropdown-item"
+                                                            href="{% url 'tickets:charge_parking_ticket' ticket.id %}?next={{ request.get_full_path|urlencode }}"
+                                                        >
+                                                            Cobrar con código
+                                                        </a>
+                                                    </li>
+
+                                                    <li>
+                                                        <a
+                                                            class="dropdown-item"
+                                                            href="{% url 'tickets:charge_parking_without_code' ticket.id %}?next={{ request.get_full_path|urlencode }}"
+                                                        >
+                                                            Cobrar sin código
+                                                        </a>
+                                                    </li>
+
+                                                    <li>
+                                                        <a
+                                                            class="dropdown-item"
+                                                            href="{% url 'tickets:edit_parking_ticket' ticket.id %}?next={{ request.get_full_path|urlencode }}"
+                                                        >
+                                                            Editar ticket
+                                                        </a>
+                                                    </li>
+
+                                                    <li>
+                                                        <a
+                                                            class="dropdown-item"
+                                                            href="{% url 'tickets:apply_discount' ticket.id %}?next={{ request.get_full_path|urlencode }}"
+                                                        >
+                                                            {% if ticket.discount_amount > 0 %}
+                                                                Editar descuento
+                                                            {% else %}
+                                                                Aplicar descuento
+                                                            {% endif %}
+                                                        </a>
+                                                    </li>
+
+                                                {% elif ticket.parking_mode != "prepaid" and ticket.status == "active" %}
+                                                    <li><hr class="dropdown-divider"></li>
+
+                                                    <li>
+                                                        <a
+                                                            class="dropdown-item"
+                                                            href="{% url 'tickets:charge_parking_ticket' ticket.id %}?next={{ request.get_full_path|urlencode }}"
+                                                        >
+                                                            Cobrar con código
+                                                        </a>
+                                                    </li>
+
+                                                    <li>
+                                                        <a
+                                                            class="dropdown-item"
+                                                            href="{% url 'tickets:charge_parking_without_code' ticket.id %}?next={{ request.get_full_path|urlencode }}"
+                                                        >
+                                                            Cobrar sin código
+                                                        </a>
+                                                    </li>
+
+                                                    <li>
+                                                        <a
+                                                            class="dropdown-item"
+                                                            href="{% url 'tickets:edit_parking_ticket' ticket.id %}?next={{ request.get_full_path|urlencode }}"
+                                                        >
+                                                            Editar ticket
+                                                        </a>
+                                                    </li>
+
+                                                    <li>
+                                                        <a
+                                                            class="dropdown-item"
+                                                            href="{% url 'tickets:apply_discount' ticket.id %}?next={{ request.get_full_path|urlencode }}"
+                                                        >
+                                                            {% if ticket.discount_amount > 0 %}
+                                                                Editar descuento
+                                                            {% else %}
+                                                                Aplicar descuento
+                                                            {% endif %}
+                                                        </a>
+                                                    </li>
+                                                {% endif %}
+
+                                            {% endif %}
+
+                                            {# ========================= #}
+                                            {# REABRIR TICKET PAGADO #}
+                                            {# ========================= #}
+
+                                            {% if ticket.status == "paid" %}
                                                 <li><hr class="dropdown-divider"></li>
 
                                                 <li>
                                                     <a
-                                                        class="dropdown-item"
-                                                        href="{% url 'tickets:charge_parking_ticket' ticket.id %}?next={{ request.get_full_path|urlencode }}"
+                                                        class="dropdown-item text-warning"
+                                                        href="{% url 'tickets:reopen_ticket' ticket.id %}?next={{ request.get_full_path|urlencode }}"
                                                     >
-                                                        Cobrar con código
-                                                    </a>
-                                                </li>
-
-                                                <li>
-                                                    <a
-                                                        class="dropdown-item"
-                                                        href="{% url 'tickets:charge_parking_without_code' ticket.id %}?next={{ request.get_full_path|urlencode }}"
-                                                    >
-                                                        Cobrar sin código
-                                                    </a>
-                                                </li>
-
-                                                <li>
-                                                    <a
-                                                        class="dropdown-item"
-                                                        href="{% url 'tickets:edit_parking_ticket' ticket.id %}?next={{ request.get_full_path|urlencode }}"
-                                                    >
-                                                        Editar ticket
-                                                    </a>
-                                                </li>
-
-                                                <li>
-                                                    <a
-                                                        class="dropdown-item"
-                                                        href="{% url 'tickets:apply_discount' ticket.id %}?next={{ request.get_full_path|urlencode }}"
-                                                    >
-                                                        {% if ticket.discount_amount > 0 %}
-                                                            Editar descuento
-                                                        {% else %}
-                                                            Aplicar descuento
-                                                        {% endif %}
+                                                        Reabrir ticket
                                                     </a>
                                                 </li>
                                             {% endif %}
@@ -352,87 +469,159 @@
                                 </td>
 
                                 <td>
-                                    <strong>{{ ticket.ticket_number }}</strong>
-                                </td>
+                                    <div class="fw-bold">
+                                        {{ ticket.ticket_number }}
+                                    </div>
 
-                                <td>
-                                    {% if ticket.ticket_type == "wash" %}
-                                        <span class="badge text-bg-info">Lavado</span>
-                                    {% elif ticket.ticket_type == "parking" %}
-                                        <span class="badge text-bg-primary">Parqueo</span>
-                                    {% else %}
-                                        <span class="badge text-bg-secondary">{{ ticket.get_ticket_type_display }}</span>
-                                    {% endif %}
-                                </td>
-
-                                <td>
-                                    {% if ticket.status == "pending_payment" %}
-                                        <span class="badge text-bg-warning">Pendiente</span>
-                                    {% elif ticket.status == "active" %}
-                                        <span class="badge text-bg-primary">Activo</span>
-                                    {% elif ticket.status == "paid" %}
-                                        <span class="badge text-bg-success">Pagado</span>
-                                    {% elif ticket.status == "cancelled" %}
-                                        <span class="badge text-bg-danger">Anulado</span>
-                                    {% else %}
-                                        <span class="badge text-bg-secondary">{{ ticket.get_status_display }}</span>
-                                    {% endif %}
-                                </td>
-
-                                <td>
-                                    {{ ticket.customer_name_snapshot|default:"No indicado" }}
-                                    <br>
-                                    <small class="text-muted">
-                                        {{ ticket.customer_phone_snapshot|default:"Sin teléfono" }}
-                                    </small>
-                                </td>
-
-                                <td>
-                                    {{ ticket.created_by_employee.username }}
-
-                                    {% if ticket.created_by_employee.full_name %}
-                                        <br>
+                                    {% if ticket.print_count > 0 %}
                                         <small class="text-muted">
-                                            {{ ticket.created_by_employee.full_name }}
+                                            Impreso {{ ticket.print_count }} vez/veces
+                                        </small>
+                                    {% else %}
+                                        <small class="text-muted">
+                                            Sin imprimir
                                         </small>
                                     {% endif %}
                                 </td>
 
                                 <td>
-                                    <span class="badge text-bg-dark">
-                                        {{ ticket.vehicle_plate }}
-                                    </span>
+                                    <div class="mb-1">
+                                        {% if ticket.ticket_type == "wash" %}
+                                            <span class="badge text-bg-info">Lavado</span>
+                                        {% elif ticket.ticket_type == "parking" and ticket.parking_mode == "prepaid" %}
+                                            <span class="badge text-bg-info">Parqueo prepago</span>
+                                        {% elif ticket.ticket_type == "parking" %}
+                                            <span class="badge text-bg-primary">Parqueo por horas</span>
+                                        {% else %}
+                                            <span class="badge text-bg-secondary">{{ ticket.get_ticket_type_display }}</span>
+                                        {% endif %}
+                                    </div>
+
+                                    <div>
+                                        {% if ticket.status == "pending_payment" %}
+                                            <span class="badge text-bg-warning">Pendiente</span>
+                                        {% elif ticket.status == "active" %}
+                                            <span class="badge text-bg-primary">Activo</span>
+                                        {% elif ticket.status == "paid" %}
+                                            <span class="badge text-bg-success">Pagado</span>
+                                        {% elif ticket.status == "cancelled" %}
+                                            <span class="badge text-bg-danger">Anulado</span>
+                                        {% else %}
+                                            <span class="badge text-bg-secondary">{{ ticket.get_status_display }}</span>
+                                        {% endif %}
+                                    </div>
+
+                                    {% if ticket.ticket_type == "parking" and ticket.parking_mode == "prepaid" %}
+                                        <div class="mt-1">
+                                            <span class="badge {{ ticket.prepaid_validity_badge_class }}">
+                                                {{ ticket.prepaid_validity_label }}
+                                            </span>
+                                        </div>
+                                    {% endif %}
+
+                                    {% if ticket.discount_amount > 0 %}
+                                        <div class="mt-1">
+                                            <span class="badge text-bg-warning">
+                                                Con descuento
+                                            </span>
+                                        </div>
+                                    {% endif %}
                                 </td>
 
                                 <td>
-                                    {{ ticket.cash_day.business_date|date:"d/m/Y" }}
+                                    <div class="fw-semibold">
+                                        {{ ticket.customer_name_snapshot|default:"No indicado" }}
+                                    </div>
+
+                                    <small class="text-muted">
+                                        {{ ticket.customer_phone_snapshot|default:"Sin teléfono" }}
+                                    </small>
+
                                     <br>
+
+                                    {% if ticket.vehicle_plate %}
+                                        <span class="badge text-bg-dark mt-1">
+                                            {{ ticket.vehicle_plate }}
+                                        </span>
+                                    {% else %}
+                                        <span class="badge text-bg-secondary mt-1">
+                                            Sin placa
+                                        </span>
+                                    {% endif %}
+
+                                    {% if ticket.ticket_type == "parking" and ticket.parking_mode == "prepaid" %}
+                                        <br>
+                                        <small class="text-muted">
+                                            {{ ticket.prepaid_plan_name_snapshot|default:ticket.prepaid_description }}
+                                        </small>
+                                    {% elif ticket.ticket_type == "wash" %}
+                                        <br>
+                                        <small class="text-muted">
+                                            {{ ticket.service_name_snapshot }}
+                                        </small>
+                                    {% endif %}
+                                </td>
+
+                                <td>
+                                    <div>
+                                        {{ ticket.cash_day.business_date|date:"d/m/Y" }}
+                                    </div>
+
                                     <small class="text-muted">
                                         Caja #{{ ticket.cash_day.id }}
                                     </small>
+
+                                    <br>
+
+                                    <small class="text-muted">
+                                        {{ ticket.created_by_employee.username }}
+                                    </small>
                                 </td>
 
-                                <td>
-                                    <strong>₡{{ ticket.display_total_with_tax }}</strong>
+                                <td class="text-end">
+                                    <div class="fw-bold fs-6">
+                                        ₡{{ ticket.display_total_with_tax }}
+                                    </div>
 
-                                    {% if ticket.ticket_type == "parking" and ticket.status == "active" %}
+                                    {% if ticket.discount_amount > 0 %}
+                                        <small class="text-warning">
+                                            Desc: ₡{{ ticket.discount_amount }}
+                                        </small>
+                                    {% endif %}
+
+                                    {% if ticket.ticket_type == "parking" and ticket.parking_mode != "prepaid" and ticket.status == "active" %}
                                         <br>
                                         <small class="text-muted">
                                             {{ ticket.display_parking_minutes }} min
                                         </small>
+                                    {% elif ticket.ticket_type == "parking" and ticket.parking_mode == "prepaid" %}
+                                        <br>
+                                        <small class="text-muted">
+                                            {% if ticket.prepaid_end_at %}
+                                                Hasta {{ ticket.prepaid_end_at|date:"d/m/Y H:i" }}
+                                            {% else %}
+                                                Sin fecha final
+                                            {% endif %}
+                                        </small>
                                     {% endif %}
                                 </td>
 
                                 <td>
-                                    {{ ticket.created_at|date:"d/m/Y H:i" }}
-                                </td>
+                                    <div>
+                                        <small class="text-muted">Creado</small>
+                                        <br>
+                                        {{ ticket.created_at|date:"d/m/Y H:i" }}
+                                    </div>
 
-                                <td>
-                                    {% if ticket.paid_at %}
-                                        {{ ticket.paid_at|date:"d/m/Y H:i" }}
-                                    {% else %}
-                                        <span class="text-muted">No pagado</span>
-                                    {% endif %}
+                                    <div class="mt-1">
+                                        <small class="text-muted">Pagado</small>
+                                        <br>
+                                        {% if ticket.paid_at %}
+                                            {{ ticket.paid_at|date:"d/m/Y H:i" }}
+                                        {% else %}
+                                            <span class="text-muted">No pagado</span>
+                                        {% endif %}
+                                    </div>
                                 </td>
                             </tr>
                         {% endfor %}
@@ -446,7 +635,7 @@
                     Prueba cambiando los filtros o limpiando la búsqueda.
                 </p>
 
-                <a href="{% url 'tickets:all_tickets' %}" class="btn btn-outline-secondary">
+                <a href="{% url 'tickets:all_tickets' %}" class="btn btn-danger">
                     Limpiar filtros
                 </a>
             </div>
@@ -454,5 +643,47 @@
 
     </div>
 </div>
+
+<style>
+    .tickets-table th,
+    .tickets-table td {
+        white-space: nowrap;
+        vertical-align: middle;
+    }
+
+    .tickets-table td:nth-child(4),
+    .tickets-table td:nth-child(7) {
+        white-space: normal;
+        min-width: 170px;
+    }
+
+    .actions-col {
+        width: 105px;
+    }
+
+    .ticket-table-responsive {
+        min-height: 250px;
+    }
+
+    @media (max-width: 1100px) {
+        .tickets-table {
+            font-size: 0.88rem;
+        }
+
+        .tickets-table th,
+        .tickets-table td {
+            padding: 0.55rem;
+        }
+
+        .btn-sm {
+            padding: 0.2rem 0.45rem;
+            font-size: 0.78rem;
+        }
+
+        .badge {
+            font-size: 0.72rem;
+        }
+    }
+</style>
 
 {% endblock %}

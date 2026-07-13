@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from catalog.models import Extra, Service
+from catalog.models import Extra, Service, PrepaidParkingPlan
 
 
 @admin.register(Service)
@@ -89,3 +89,47 @@ class ExtraAdmin(admin.ModelAdmin):
         queryset.update(is_active=False)
 
     deactivate_extras.short_description = "Desactivar extras seleccionados"
+
+
+@admin.register(PrepaidParkingPlan)
+class PrepaidParkingPlanAdmin(admin.ModelAdmin):
+    list_display = [
+        "name",
+        "duration_quantity",
+        "duration_unit",
+        "price_with_tax",
+        "tax_rate",
+        "is_active",
+        "created_at",
+        "updated_at",
+    ]
+
+    list_filter = [
+        "duration_unit",
+        "is_active",
+    ]
+
+    search_fields = [
+        "name",
+    ]
+
+    readonly_fields = [
+        "created_at",
+        "updated_at",
+    ]
+
+    actions = [
+        "activate_plans",
+        "deactivate_plans",
+    ]
+
+    @admin.action(description="Activar planes seleccionados")
+    def activate_plans(self, request, queryset):
+        queryset.update(is_active=True)
+
+    @admin.action(description="Desactivar planes seleccionados")
+    def deactivate_plans(self, request, queryset):
+        queryset.update(is_active=False)
+
+    def has_delete_permission(self, request, obj=None):
+        return False

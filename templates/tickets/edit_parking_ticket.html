@@ -9,21 +9,36 @@
 
         <div class="d-flex justify-content-between align-items-center mb-3">
             <div>
-                <h1 class="h3 fw-bold mb-1">Editar ticket de parqueo</h1>
-                <p class="text-muted mb-0">
-                    Solo se pueden corregir nombre, teléfono y placa. La hora de entrada no se modifica.
-                </p>
+                {% if ticket.parking_mode == "prepaid" %}
+                    <h1 class="h3 fw-bold mb-1">Editar parqueo prepago</h1>
+                    <p class="text-muted mb-0">
+                        Puede corregir los datos del cliente, placa, plan e inicio de vigencia mientras esté pendiente de pago.
+                    </p>
+                {% else %}
+                    <h1 class="h3 fw-bold mb-1">Editar ticket de parqueo</h1>
+                    <p class="text-muted mb-0">
+                        Solo se pueden corregir nombre, teléfono y placa. La hora de entrada no se modifica.
+                    </p>
+                {% endif %}
             </div>
-
         </div>
 
         <div class="alert alert-warning">
-            Esta acción requiere OTP y motivo. No cambia la hora de entrada, tarifa, total ni código de cierre.
+            {% if ticket.parking_mode == "prepaid" %}
+                Esta acción requiere OTP y motivo. Si cambia el plan o el inicio de vigencia,
+                el sistema recalculará el total y la fecha final del parqueo prepago.
+            {% else %}
+                Esta acción requiere OTP y motivo. No cambia la hora de entrada, tarifa, total ni código de cierre.
+            {% endif %}
         </div>
 
         <div class="card shadow-sm border-0 mb-3">
             <div class="card-header bg-dark text-white">
-                Datos actuales del parqueo
+                {% if ticket.parking_mode == "prepaid" %}
+                    Datos actuales del parqueo prepago
+                {% else %}
+                    Datos actuales del parqueo
+                {% endif %}
             </div>
 
             <div class="card-body">
@@ -35,27 +50,99 @@
                     </div>
 
                     <div class="col-md-6">
+                        <small class="text-muted">Tipo</small>
+                        <div>
+                            {% if ticket.parking_mode == "prepaid" %}
+                                <span class="badge text-bg-info">Parqueo prepago</span>
+                            {% else %}
+                                <span class="badge text-bg-primary">Parqueo por horas</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
                         <small class="text-muted">Estado</small>
                         <div>
-                            <span class="badge text-bg-primary">
-                                {{ ticket.get_status_display }}
-                            </span>
+                            {% if ticket.status == "pending_payment" %}
+                                <span class="badge text-bg-warning">Pendiente de pago</span>
+                            {% elif ticket.status == "active" %}
+                                <span class="badge text-bg-primary">Activo</span>
+                            {% elif ticket.status == "paid" %}
+                                <span class="badge text-bg-success">Pagado</span>
+                            {% elif ticket.status == "cancelled" %}
+                                <span class="badge text-bg-danger">Anulado</span>
+                            {% else %}
+                                <span class="badge text-bg-secondary">
+                                    {{ ticket.get_status_display }}
+                                </span>
+                            {% endif %}
                         </div>
                     </div>
 
-                    <div class="col-md-6">
-                        <small class="text-muted">Hora de entrada</small>
-                        <div class="fw-bold">
-                            {{ ticket.parking_entry_at|date:"d/m/Y H:i" }}
+                    {% if ticket.parking_mode == "prepaid" %}
+                        <div class="col-md-6">
+                            <small class="text-muted">Vigencia</small>
+                            <div>
+                                <span class="badge {{ ticket.prepaid_validity_badge_class }}">
+                                    {{ ticket.prepaid_validity_label }}
+                                </span>
+                            </div>
                         </div>
-                    </div>
 
-                    <div class="col-md-6">
-                        <small class="text-muted">Monto mínimo actual</small>
-                        <div class="fw-bold">
-                            ₡{{ ticket.total_with_tax }}
+                        <div class="col-md-6">
+                            <small class="text-muted">Plan actual</small>
+                            <div class="fw-bold">
+                                {{ ticket.prepaid_plan_name_snapshot|default:ticket.prepaid_description }}
+                            </div>
                         </div>
-                    </div>
+
+                        <div class="col-md-6">
+                            <small class="text-muted">Precio actual</small>
+                            <div class="fw-bold">
+                                ₡{{ ticket.total_with_tax }}
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <small class="text-muted">Inicio de vigencia actual</small>
+                            <div class="fw-bold">
+                                {% if ticket.prepaid_start_at %}
+                                    {{ ticket.prepaid_start_at|date:"d/m/Y H:i" }}
+                                {% else %}
+                                    No indicado
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <small class="text-muted">Fin de vigencia actual</small>
+                            <div class="fw-bold">
+                                {% if ticket.prepaid_end_at %}
+                                    {{ ticket.prepaid_end_at|date:"d/m/Y H:i" }}
+                                {% else %}
+                                    No indicado
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="col-md-6">
+                            <small class="text-muted">Hora de entrada</small>
+                            <div class="fw-bold">
+                                {% if ticket.parking_entry_at %}
+                                    {{ ticket.parking_entry_at|date:"d/m/Y H:i" }}
+                                {% else %}
+                                    No indicada
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <small class="text-muted">Monto mínimo actual</small>
+                            <div class="fw-bold">
+                                ₡{{ ticket.total_with_tax }}
+                            </div>
+                        </div>
+                    {% endif %}
 
                 </div>
             </div>
@@ -66,6 +153,12 @@
             <input type="hidden" name="next" value="{{ next_url }}">
 
             <div class="card-body">
+
+                {% if form.non_field_errors %}
+                    <div class="alert alert-danger">
+                        {{ form.non_field_errors }}
+                    </div>
+                {% endif %}
 
                 <h5 class="card-title mb-3">Datos a corregir</h5>
 
@@ -89,31 +182,70 @@
                     </div>
                 </div>
 
+                {% if ticket.parking_mode == "prepaid" %}
+                    <hr>
+
+                    <h5 class="card-title mb-3">Datos del parqueo prepago</h5>
+
+                    <div class="row g-3 mb-4">
+                        {% if form.prepaid_plan %}
+                            <div class="col-md-6">
+                                <label class="form-label">{{ form.prepaid_plan.label }}</label>
+                                {{ form.prepaid_plan }}
+                                {{ form.prepaid_plan.errors }}
+                                <div class="form-text">
+                                    El precio y duración salen del plan configurado en catálogo.
+                                </div>
+                            </div>
+                        {% endif %}
+
+                        {% if form.prepaid_start_at %}
+                            <div class="col-md-6">
+                                <label class="form-label">{{ form.prepaid_start_at.label }}</label>
+                                {{ form.prepaid_start_at }}
+                                {{ form.prepaid_start_at.errors }}
+                                <div class="form-text">
+                                    Puede ser una fecha actual o futura si el cliente pagará para usarlo después.
+                                </div>
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="alert alert-info">
+                        Al guardar, el sistema recalculará automáticamente la fecha final,
+                        subtotal, IVA y total según el plan seleccionado.
+                    </div>
+                {% endif %}
+
                 <hr>
 
                 <h5 class="card-title mb-3">Autorización</h5>
 
                 {% if form.authorized_by_employee %}
-                <div class="mb-3">
-                    <label class="form-label">{{ form.authorized_by_employee.label }}</label>
-                    {{ form.authorized_by_employee }}
-                    {{ form.authorized_by_employee.errors }}
-                </div>
+                    <div class="mb-3">
+                        <label class="form-label">{{ form.authorized_by_employee.label }}</label>
+                        {{ form.authorized_by_employee }}
+                        {{ form.authorized_by_employee.errors }}
+                    </div>
                 {% endif %}
 
                 {% if form.otp_code %}
-                <div class="mb-3">
-                    <label class="form-label">{{ form.otp_code.label }}</label>
-                    {{ form.otp_code }}
-                    {{ form.otp_code.errors }}
-                </div>
+                    <div class="mb-3">
+                        <label class="form-label">{{ form.otp_code.label }}</label>
+                        {{ form.otp_code }}
+                        {{ form.otp_code.errors }}
+                    </div>
                 {% endif %}
 
                 <div class="mb-3">
                     <label class="form-label">{{ form.reason.label }}</label>
                     {{ form.reason }}
                     <div class="form-text">
-                        Ejemplo: placa mal digitada, nombre incorrecto, teléfono incompleto, etc.
+                        {% if ticket.parking_mode == "prepaid" %}
+                            Ejemplo: placa mal digitada, cliente cambió el plan, inicio de vigencia incorrecto, etc.
+                        {% else %}
+                            Ejemplo: placa mal digitada, nombre incorrecto, teléfono incompleto, etc.
+                        {% endif %}
                     </div>
                     {{ form.reason.errors }}
                 </div>

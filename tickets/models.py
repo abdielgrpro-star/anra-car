@@ -1,8 +1,10 @@
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 from cash.models import CashDay
 from catalog.models import Extra, Service
+
 
 # this where we are going to save the customer's data
 class Customer(models.Model):
@@ -20,16 +22,28 @@ class Customer(models.Model):
             return self.full_name
         return "Customer without name"
 
+
 # This is the principal Ticket table
 class Ticket(models.Model):
     WASH = "wash"
     PARKING = "parking"
+
     # each ticket has 1 type wash or parking
     TICKET_TYPE_CHOICES = [
         (WASH, "Lavado"),
         (PARKING, "Parqueo"),
     ]
-# this are the ticket status
+
+    # parking modes
+    HOURLY = "hourly"
+    PREPAID = "prepaid"
+
+    PARKING_MODE_CHOICES = [
+        (HOURLY, "Por horas"),
+        (PREPAID, "Prepago"),
+    ]
+
+    # this are the ticket status
     PENDING_PAYMENT = "pending_payment"
     ACTIVE = "active"
     PAID = "paid"
@@ -64,13 +78,15 @@ class Ticket(models.Model):
         blank=True,
         related_name="tickets",
     )
-# we connect our ticket with the service requested
+
+    # we connect our ticket with the service requested
     service = models.ForeignKey(
         Service,
         on_delete=models.PROTECT,
         related_name="tickets",
     )
-# we connect our ticket with the cash day
+
+    # we connect our ticket with the cash day
     cash_day = models.ForeignKey(
         CashDay,
         on_delete=models.PROTECT,
@@ -117,20 +133,27 @@ class Ticket(models.Model):
         decimal_places=2,
         default=0,
     )
-# here we save the hash code that will be necessary to close the ticket
+
+    # here we save the hash code that will be necessary to close the ticket
     closing_code_hash = models.TextField()
 
     closing_code_for_print = models.CharField(
-    max_length=20,
-    blank=True,
-)
+        max_length=20,
+        blank=True,
+    )
+
+    # parking fields
+    parking_mode = models.CharField(
+        max_length=20,
+        choices=PARKING_MODE_CHOICES,
+        default=HOURLY,
+    )
 
     parking_entry_at = models.DateTimeField(null=True, blank=True)
     parking_exit_at = models.DateTimeField(null=True, blank=True)
     parking_minutes = models.PositiveIntegerField(null=True, blank=True)
 
-# from here we have the parking fields, so if the ticket is a parking type this will be use and the wash fields are going to be null
-
+    # from here we have the parking fields, so if the ticket is a parking type this will be use and the wash fields are going to be null
     parking_first_hour_price_snapshot = models.DecimalField(
         max_digits=12,
         decimal_places=2,
@@ -146,6 +169,44 @@ class Ticket(models.Model):
     )
 
     parking_block_minutes_snapshot = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+    )
+
+    # prepaid parking fields
+    prepaid_start_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    prepaid_end_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    prepaid_description = models.CharField(
+        max_length=150,
+        blank=True,
+    )
+
+    prepaid_plan_name_snapshot = models.CharField(
+        max_length=120,
+        blank=True,
+    )
+
+    prepaid_plan_duration_quantity_snapshot = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+    )
+
+    prepaid_plan_duration_unit_snapshot = models.CharField(
+        max_length=20,
+        blank=True,
+    )
+
+    prepaid_plan_price_with_tax_snapshot = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
         null=True,
         blank=True,
     )
@@ -191,6 +252,94 @@ class Ticket(models.Model):
     def __str__(self):
         return f"{self.ticket_number} - {self.vehicle_plate}"
 
+    @property
+    def is_hourly_parking(self):
+        return (
+            self.ticket_type == self.PARKING
+            and self.parking_mode == self.HOURLY
+        )
+
+
+    @property
+    def is_prepaid_parking(self):
+        return (
+            self.ticket_type == self.PARKING
+            and self.parking_mode == self.PREPAID
+        )
+
+
+    @property
+    def is_prepaid_parking_active(self):
+        if not self.is_prepaid_parking:
+            return False
+
+        if not self.prepaid_start_at or not self.prepaid_end_at:
+            return False
+
+        now = timezone.now()
+
+        return self.prepaid_start_at <= now <= self.prepaid_end_at
+
+
+    @property
+    def prepaid_validity_status(self):
+        if not self.is_prepaid_parking:
+            return ""
+
+        if self.status == self.CANCELLED:
+            return "cancelled"
+
+        if not self.prepaid_start_at or not self.prepaid_end_at:
+            return "unknown"
+
+        now = timezone.now()
+
+        if now < self.prepaid_start_at:
+            return "pending"
+
+        if self.prepaid_start_at <= now <= self.prepaid_end_at:
+            return "active"
+
+        return "expired"
+
+
+    @property
+    def prepaid_validity_label(self):
+        status = self.prepaid_validity_status
+
+        if status == "pending":
+            return "Pendiente"
+
+        if status == "active":
+            return "Vigente"
+
+        if status == "expired":
+            return "Vencido"
+
+        if status == "cancelled":
+            return "Anulado"
+
+        return ""
+
+
+    @property
+    def prepaid_validity_badge_class(self):
+        status = self.prepaid_validity_status
+
+        if status == "pending":
+            return "text-bg-warning"
+
+        if status == "active":
+            return "text-bg-success"
+
+        if status == "expired":
+            return "text-bg-secondary"
+
+        if status == "cancelled":
+            return "text-bg-danger"
+
+        return "text-bg-light"
+
 
 class TicketExtra(models.Model):
     ticket = models.ForeignKey(
@@ -198,7 +347,8 @@ class TicketExtra(models.Model):
         on_delete=models.CASCADE,
         related_name="ticket_extras",
     )
-# we connect our ticket with the extras
+
+    # we connect our ticket with the extras
     extra = models.ForeignKey(
         Extra,
         on_delete=models.PROTECT,
@@ -240,3 +390,5 @@ class TicketExtra(models.Model):
 
     def __str__(self):
         return f"{self.ticket.ticket_number} - {self.extra_name_snapshot}"
+    
+    

@@ -32,12 +32,26 @@ def encode_text(text):
 
     return str(text).encode("cp850", errors="replace")
 
+
 def format_local_datetime(value):
     if not value:
         return "No indicado"
 
     local_value = timezone.localtime(value)
     return local_value.strftime("%d/%m/%Y %H:%M")
+
+
+def format_duration_unit(unit):
+    if unit == "days":
+        return "dia(s)"
+
+    if unit == "weeks":
+        return "semana(s)"
+
+    if unit == "months":
+        return "mes(es)"
+
+    return unit or "No indicado"
 
 
 def build_basic_ticket(ticket):
@@ -62,6 +76,12 @@ def build_basic_ticket(ticket):
 
     if ticket.ticket_type == "wash":
         data += encode_text("Ticket de lavado\n")
+
+    elif ticket.ticket_type == "parking" and ticket.parking_mode == "prepaid":
+        data += ESC + b"E" + b"\x01"
+        data += encode_text("Ticket de parqueo prepago\n")
+        data += ESC + b"E" + b"\x00"
+
     elif ticket.ticket_type == "parking":
         data += encode_text("Ticket de parqueo\n")
 
@@ -90,7 +110,9 @@ def build_basic_ticket(ticket):
     if ticket.ticket_type == "wash":
         data += encode_text("SERVICIO\n")
         data += encode_text(f"{ticket.service_name_snapshot}\n")
-        data += encode_text(f"Precio: CRC {ticket.service_price_with_tax_snapshot}\n")
+        data += encode_text(
+            f"Precio: CRC {ticket.service_price_with_tax_snapshot}\n"
+        )
 
         ticket_extras = ticket.ticket_extras.all()
 
@@ -106,8 +128,45 @@ def build_basic_ticket(ticket):
         else:
             data += encode_text("Extras: Sin extras\n")
 
+    elif ticket.ticket_type == "parking" and ticket.parking_mode == "prepaid":
+        data += ESC + b"E" + b"\x01"
+        data += encode_text("PARQUEO PREPAGO\n")
+        data += ESC + b"E" + b"\x00"
+
+        data += encode_text(
+            f"Plan: {ticket.prepaid_plan_name_snapshot or ticket.prepaid_description or 'No indicado'}\n"
+        )
+
+        if (
+            ticket.prepaid_plan_duration_quantity_snapshot
+            and ticket.prepaid_plan_duration_unit_snapshot
+        ):
+            duration_unit = format_duration_unit(
+                ticket.prepaid_plan_duration_unit_snapshot
+            )
+
+            data += encode_text(
+                f"Duracion: {ticket.prepaid_plan_duration_quantity_snapshot} {duration_unit}\n"
+            )
+
+        data += encode_text(
+            f"Vigencia inicio: {format_local_datetime(ticket.prepaid_start_at)}\n"
+        )
+        data += encode_text(
+            f"Vigencia fin: {format_local_datetime(ticket.prepaid_end_at)}\n"
+        )
+
+        data += encode_text(
+            f"Precio plan: CRC {ticket.prepaid_plan_price_with_tax_snapshot or ticket.service_price_with_tax_snapshot}\n"
+        )
+
+        if ticket.status == "paid":
+            data += encode_text("Pago: Cancelado\n")
+        else:
+            data += encode_text("Pago: Pendiente\n")
+
     elif ticket.ticket_type == "parking":
-        data += encode_text("PARQUEO\n")
+        data += encode_text("PARQUEO POR HORAS\n")
 
         if ticket.parking_entry_at:
             data += encode_text(
@@ -138,7 +197,18 @@ def build_basic_ticket(ticket):
 
     data += ESC + b"a" + b"\x01"
 
-    if ticket.ticket_type == "parking" and ticket.status == "active":
+    if ticket.ticket_type == "parking" and ticket.parking_mode == "prepaid":
+        if ticket.status != "paid":
+            data += encode_text("Este parqueo prepago\n")
+            data += encode_text("esta pendiente de pago.\n")
+        else:
+            data += encode_text("Parqueo prepago pagado.\n")
+
+        data += ESC + b"E" + b"\x01"
+        data += encode_text(f"TOTAL: CRC {ticket.total_with_tax}\n")
+        data += ESC + b"E" + b"\x00"
+
+    elif ticket.ticket_type == "parking" and ticket.status == "active":
         data += encode_text("El total final se actualiza\n")
         data += encode_text("al devolver el ticket.\n")
 
@@ -170,7 +240,12 @@ def build_basic_ticket(ticket):
 
     data += encode_text("Gracias por preferirnos.\n")
     data += encode_text("Cuidamos su vehiculo.\n")
-    data += encode_text("Presente este ticket al pagar.\n")
+
+    if ticket.ticket_type == "parking" and ticket.parking_mode == "prepaid":
+        data += encode_text("Presente este ticket como\n")
+        data += encode_text("comprobante de vigencia.\n")
+    else:
+        data += encode_text("Presente este ticket al pagar.\n")
 
     # Avanzar papel
     data += b"\n\n\n\n"

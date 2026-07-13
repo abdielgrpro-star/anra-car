@@ -10,7 +10,7 @@ urlpatterns = [
     path("<int:ticket_id>/print/", views.print_ticket, name="print_ticket"),
     path("<int:ticket_id>/reprint/", views.reprint_ticket, name="reprint_ticket"),
     path("<int:ticket_id>/discount/", views.apply_discount, name="apply_discount"),
-    path("<int:ticket_id>/reopen/", views.reopen_ticket, name="reopen_ticket",),
+    path("<int:ticket_id>/reopen/", views.reopen_ticket, name="reopen_ticket"),
 
     path("wash/create/", views.create_wash_ticket, name="create_wash_ticket"),
     path("wash/<int:ticket_id>/edit/", views.edit_wash_ticket, name="edit_wash_ticket"),
@@ -19,6 +19,7 @@ urlpatterns = [
     path("wash/<int:ticket_id>/", views.wash_ticket_detail, name="wash_ticket_detail"),
 
     path("parking/create/", views.create_parking_ticket, name="create_parking_ticket"),
+    path("parking/prepaid/create/", views.create_prepaid_parking_ticket, name="create_prepaid_parking_ticket"),
     path("parking/<int:ticket_id>/edit/", views.edit_parking_ticket, name="edit_parking_ticket"),
     path("parking/<int:ticket_id>/charge/", views.charge_parking_ticket, name="charge_parking_ticket"),
     path("parking/<int:ticket_id>/charge/without-code/", views.charge_parking_without_code, name="charge_parking_without_code"),

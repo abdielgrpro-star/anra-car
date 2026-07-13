@@ -1,30 +1,48 @@
 {% extends "base.html" %}
 
-{% block title %}Crear parqueo | Anracar{% endblock %}
+{% block title %}Crear parqueo por horas | Anracar{% endblock %}
 
 {% block content %}
 
 <div class="row justify-content-center">
     <div class="col-lg-8">
 
-        <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
             <div>
-                <h1 class="h3 fw-bold mb-1">Crear ticket de parqueo</h1>
+                <h1 class="h3 fw-bold mb-1">Crear parqueo por horas</h1>
                 <p class="text-muted mb-0">
                     Registra la entrada del vehículo. La hora se guarda automáticamente.
                 </p>
             </div>
 
+            <div class="d-flex gap-2">
+                <a href="{% url 'tickets:create_prepaid_parking_ticket' %}" class="btn btn-outline-primary">
+                    + Parqueo prepago
+                </a>
+
+                <a href="{% url 'home' %}" class="btn btn-outline-secondary">
+                    ← Volver
+                </a>
+            </div>
         </div>
 
         <form method="post" class="card shadow-sm border-0">
             {% csrf_token %}
 
+            <div class="card-header bg-dark text-white">
+                Datos del cliente y vehículo
+            </div>
+
             <div class="card-body">
 
-                <h5 class="card-title mb-3">Datos del vehículo</h5>
+                {% if form.non_field_errors %}
+                    <div class="alert alert-danger">
+                        {{ form.non_field_errors }}
+                    </div>
+                {% endif %}
 
                 <div class="row g-3">
+
                     <div class="col-md-6">
                         <label class="form-label">{{ form.customer_name.label }}</label>
                         {{ form.customer_name }}
@@ -42,10 +60,12 @@
                         {{ form.vehicle_plate }}
                         {{ form.vehicle_plate.errors }}
                     </div>
+
                 </div>
 
                 <div class="alert alert-info mt-4 mb-0">
-                    La hora de entrada será tomada automáticamente con la hora del sistema.
+                    Este ticket quedará como <strong>parqueo activo</strong>.
+                    El monto final se calculará cuando el cliente pague y se cierre el ticket.
                 </div>
 
             </div>
@@ -56,7 +76,7 @@
                 </a>
 
                 <button type="submit" class="btn btn-primary">
-                    Crear ticket de parqueo
+                    Crear parqueo por horas
                 </button>
             </div>
         </form>

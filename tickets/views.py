@@ -8,8 +8,10 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.urls import reverse
-from tickets.utils import calculate_parking_total, calculate_current_parking_total
+from tickets.utils import calculate_parking_total
 from tickets.thermal_printer import print_ticket as print_thermal_ticket
+from django.utils.dateparse import parse_datetime
+from dateutil.relativedelta import relativedelta
 
 from audit.models import AuditLog, OtpUsage
 from accounts.permissions import user_can_authorize_sensitive_actions
@@ -35,6 +37,7 @@ from tickets.forms import (
     ParkingTicketForm,
     ReprintTicketForm,
     WashTicketForm,
+    PrepaidParkingTicketForm,
 )
 from tickets.models import Customer, Ticket, TicketExtra
 from tickets.utils import (
@@ -331,11 +334,36 @@ def parking_ticket_detail(request, ticket_id):
         ticket_type=Ticket.PARKING,
     )
 
+    is_prepaid_parking = ticket.parking_mode == Ticket.PREPAID
+    is_hourly_parking = ticket.parking_mode == Ticket.HOURLY
+
     parking_current_total = ticket.total_with_tax
     parking_current_minutes = ticket.parking_minutes or 0
     parking_total_after_discount = ticket.total_with_tax
 
-    if ticket.status == Ticket.ACTIVE:
+    prepaid_validity_status = ""
+    prepaid_validity_label = ""
+    prepaid_validity_badge_class = "text-bg-light"
+
+    if is_prepaid_parking:
+        parking_current_minutes = None
+
+        parking_current_total = (
+            ticket.prepaid_plan_price_with_tax_snapshot
+            or ticket.service_price_with_tax_snapshot
+            or ticket.total_with_tax
+        )
+
+        parking_total_after_discount = parking_current_total - ticket.discount_amount
+
+        if parking_total_after_discount < Decimal("0.00"):
+            parking_total_after_discount = Decimal("0.00")
+
+        prepaid_validity_status = ticket.prepaid_validity_status
+        prepaid_validity_label = ticket.prepaid_validity_label
+        prepaid_validity_badge_class = ticket.prepaid_validity_badge_class
+
+    elif is_hourly_parking and ticket.status == Ticket.ACTIVE:
         now = timezone.now()
 
         if ticket.parking_entry_at:
@@ -357,6 +385,7 @@ def parking_ticket_detail(request, ticket_id):
             ticket.parking_block_price_snapshot
             or Decimal("1000.00")
         )
+
         block_minutes = ticket.parking_block_minutes_snapshot or 60
 
         if parking_current_minutes <= 60:
@@ -387,9 +416,14 @@ def parking_ticket_detail(request, ticket_id):
         {
             "ticket": ticket,
             "next_url": next_url,
+            "is_prepaid_parking": is_prepaid_parking,
+            "is_hourly_parking": is_hourly_parking,
             "parking_current_total": parking_current_total,
             "parking_current_minutes": parking_current_minutes,
             "parking_total_after_discount": parking_total_after_discount,
+            "prepaid_validity_status": prepaid_validity_status,
+            "prepaid_validity_label": prepaid_validity_label,
+            "prepaid_validity_badge_class": prepaid_validity_badge_class,
         },
     )
 
@@ -581,6 +615,7 @@ def charge_wash_ticket(request, ticket_id):
 @transaction.atomic
 def charge_parking_ticket(request, ticket_id):
     next_url = get_next_url(request)
+
     ticket = get_object_or_404(
         Ticket.objects.select_related(
             "customer",
@@ -590,34 +625,70 @@ def charge_parking_ticket(request, ticket_id):
         ),
         id=ticket_id,
         ticket_type=Ticket.PARKING,
-        status=Ticket.ACTIVE,
     )
+
+    is_prepaid_parking = ticket.parking_mode == Ticket.PREPAID
+
+    if is_prepaid_parking:
+        if ticket.status != Ticket.PENDING_PAYMENT:
+            messages.error(
+                request,
+                "Este parqueo prepago no está pendiente de pago.",
+            )
+            return redirect(next_url)
+    else:
+        if ticket.status != Ticket.ACTIVE:
+            messages.error(
+                request,
+                "Este parqueo por horas no está activo para cobro.",
+            )
+            return redirect(next_url)
 
     exit_at = timezone.now()
 
-    elapsed_seconds = (exit_at - ticket.parking_entry_at).total_seconds()
-    parking_minutes = int(elapsed_seconds // 60)
+    if is_prepaid_parking:
+        parking_minutes = None
 
-    # Para evitar cobrar 0 minutos si apenas se creó el ticket
-    if parking_minutes < 1:
-        parking_minutes = 1
+        parking_total_before_discount = (
+            ticket.prepaid_plan_price_with_tax_snapshot
+            or ticket.service_price_with_tax_snapshot
+            or ticket.total_with_tax
+        )
 
-    parking_total_before_discount = calculate_parking_total(
-        minutes=parking_minutes,
-        first_hour_price=ticket.parking_first_hour_price_snapshot,
-        block_price=ticket.parking_block_price_snapshot,
-        block_minutes=ticket.parking_block_minutes_snapshot,
-    )
+        parking_total = parking_total_before_discount - ticket.discount_amount
 
-    parking_total = parking_total_before_discount - ticket.discount_amount
+        if parking_total < Decimal("0.00"):
+            parking_total = Decimal("0.00")
 
-    if parking_total < Decimal("0.00"):
-        parking_total = Decimal("0.00")
+        tax_data = calculate_tax_from_total(
+            total_with_tax=parking_total,
+            tax_rate=ticket.tax_rate,
+        )
 
-    tax_data = calculate_tax_from_total(
-        total_with_tax=parking_total,
-        tax_rate=ticket.tax_rate,
-    )
+    else:
+        elapsed_seconds = (exit_at - ticket.parking_entry_at).total_seconds()
+        parking_minutes = int(elapsed_seconds // 60)
+
+        # Para evitar cobrar 0 minutos si apenas se creó el ticket
+        if parking_minutes < 1:
+            parking_minutes = 1
+
+        parking_total_before_discount = calculate_parking_total(
+            minutes=parking_minutes,
+            first_hour_price=ticket.parking_first_hour_price_snapshot,
+            block_price=ticket.parking_block_price_snapshot,
+            block_minutes=ticket.parking_block_minutes_snapshot,
+        )
+
+        parking_total = parking_total_before_discount - ticket.discount_amount
+
+        if parking_total < Decimal("0.00"):
+            parking_total = Decimal("0.00")
+
+        tax_data = calculate_tax_from_total(
+            total_with_tax=parking_total,
+            tax_rate=ticket.tax_rate,
+        )
 
     if request.method == "POST":
         form = ChargeParkingTicketForm(request.POST)
@@ -649,6 +720,7 @@ def charge_parking_ticket(request, ticket_id):
                     },
                     new_values={
                         "attempt": "invalid_parking_closing_code",
+                        "parking_mode": ticket.parking_mode,
                     },
                     reason="Intento fallido de cobro de parqueo con código incorrecto",
                 )
@@ -670,11 +742,17 @@ def charge_parking_ticket(request, ticket_id):
             old_values = {
                 "ticket_cash_day": str(ticket.cash_day.business_date),
                 "status": ticket.status,
+                "parking_mode": ticket.parking_mode,
                 "parking_exit_at": str(ticket.parking_exit_at),
                 "parking_minutes": ticket.parking_minutes,
                 "total_with_tax": str(ticket.total_with_tax),
                 "payment": None,
             }
+
+            if is_prepaid_parking:
+                old_values["prepaid_start_at"] = str(ticket.prepaid_start_at)
+                old_values["prepaid_end_at"] = str(ticket.prepaid_end_at)
+                old_values["prepaid_plan"] = ticket.prepaid_plan_name_snapshot
 
             payment_cash_day = get_or_create_today_cash_day_for_operation()
 
@@ -696,28 +774,69 @@ def charge_parking_ticket(request, ticket_id):
 
             ticket.cash_day = payment_cash_day
             ticket.status = Ticket.PAID
-            ticket.parking_exit_at = exit_at
-            ticket.parking_minutes = parking_minutes
             ticket.subtotal_without_tax = tax_data["subtotal_without_tax"]
             ticket.tax_amount = tax_data["tax_amount"]
             ticket.total_with_tax = tax_data["total_with_tax"]
             ticket.paid_at = exit_at
             ticket.updated_by_employee = request.user
 
+            update_fields = [
+                "cash_day",
+                "status",
+                "subtotal_without_tax",
+                "tax_amount",
+                "total_with_tax",
+                "paid_at",
+                "updated_by_employee",
+                "updated_at",
+            ]
+
+            if not is_prepaid_parking:
+                ticket.parking_exit_at = exit_at
+                ticket.parking_minutes = parking_minutes
+
+                update_fields.extend(
+                    [
+                        "parking_exit_at",
+                        "parking_minutes",
+                    ]
+                )
+
             ticket.save(
-                update_fields=[
-                    "cash_day",
-                    "status",
-                    "parking_exit_at",
-                    "parking_minutes",
-                    "subtotal_without_tax",
-                    "tax_amount",
-                    "total_with_tax",
-                    "paid_at",
-                    "updated_by_employee",
-                    "updated_at",
-                ]
+                update_fields=update_fields
             )
+
+            new_values = {
+                "status": ticket.status,
+                "parking_mode": ticket.parking_mode,
+                "ticket_cash_day": str(ticket.cash_day.business_date),
+                "payment": {
+                    "method": payment_method,
+                    "amount": str(parking_total),
+                    "sinpe_reference": sinpe_reference,
+                    "cash_day": str(payment_cash_day.business_date),
+                },
+                "subtotal_without_tax": str(ticket.subtotal_without_tax),
+                "tax_amount": str(ticket.tax_amount),
+                "total_with_tax": str(ticket.total_with_tax),
+            }
+
+            if is_prepaid_parking:
+                new_values.update(
+                    {
+                        "prepaid_start_at": str(ticket.prepaid_start_at),
+                        "prepaid_end_at": str(ticket.prepaid_end_at),
+                        "prepaid_plan": ticket.prepaid_plan_name_snapshot,
+                    }
+                )
+            else:
+                new_values.update(
+                    {
+                        "parking_entry_at": str(ticket.parking_entry_at),
+                        "parking_exit_at": str(ticket.parking_exit_at),
+                        "parking_minutes": ticket.parking_minutes,
+                    }
+                )
 
             AuditLog.objects.create(
                 employee=request.user,
@@ -726,29 +845,24 @@ def charge_parking_ticket(request, ticket_id):
                 entity_type="Ticket",
                 entity_id=ticket.id,
                 old_values=old_values,
-                new_values={
-                    "status": ticket.status,
-                    "ticket_cash_day": str(ticket.cash_day.business_date),
-                    "parking_entry_at": str(ticket.parking_entry_at),
-                    "parking_exit_at": str(ticket.parking_exit_at),
-                    "parking_minutes": ticket.parking_minutes,
-                    "payment": {
-                        "method": payment_method,
-                        "amount": str(parking_total),
-                        "sinpe_reference": sinpe_reference,
-                        "cash_day": str(payment_cash_day.business_date),
-                    },
-                    "subtotal_without_tax": str(ticket.subtotal_without_tax),
-                    "tax_amount": str(ticket.tax_amount),
-                    "total_with_tax": str(ticket.total_with_tax),
-                },
-                reason="Ticket de parqueo cobrado",
+                new_values=new_values,
+                reason=(
+                    "Ticket de parqueo prepago cobrado"
+                    if is_prepaid_parking
+                    else "Ticket de parqueo cobrado"
+                ),
             )
 
-            messages.success(
-                request,
-                f"Ticket de parqueo {ticket.ticket_number} cobrado correctamente.",
-            )
+            if is_prepaid_parking:
+                messages.success(
+                    request,
+                    f"Ticket de parqueo prepago {ticket.ticket_number} cobrado correctamente.",
+                )
+            else:
+                messages.success(
+                    request,
+                    f"Ticket de parqueo {ticket.ticket_number} cobrado correctamente.",
+                )
 
             return redirect(next_url)
 
@@ -945,6 +1059,7 @@ def charge_wash_without_code(request, ticket_id):
 @transaction.atomic
 def charge_parking_without_code(request, ticket_id):
     next_url = get_next_url(request)
+
     ticket = get_object_or_404(
         Ticket.objects.select_related(
             "customer",
@@ -954,33 +1069,73 @@ def charge_parking_without_code(request, ticket_id):
         ),
         id=ticket_id,
         ticket_type=Ticket.PARKING,
-        status=Ticket.ACTIVE,
     )
+
+    is_prepaid_parking = ticket.parking_mode == Ticket.PREPAID
+
+    if is_prepaid_parking:
+        if ticket.status != Ticket.PENDING_PAYMENT:
+            messages.error(
+                request,
+                "Este parqueo prepago no está pendiente de pago.",
+            )
+            return redirect(next_url)
+    else:
+        if ticket.status != Ticket.ACTIVE:
+            messages.error(
+                request,
+                "Este parqueo por horas no está activo para cobro.",
+            )
+            return redirect(next_url)
 
     exit_at = timezone.now()
 
-    elapsed_seconds = (exit_at - ticket.parking_entry_at).total_seconds()
-    parking_minutes = int(elapsed_seconds // 60)
+    if is_prepaid_parking:
+        parking_minutes = None
 
-    if parking_minutes < 1:
-        parking_minutes = 1
+        parking_total_before_discount = (
+            ticket.prepaid_plan_price_with_tax_snapshot
+            or ticket.service_price_with_tax_snapshot
+            or ticket.total_with_tax
+        )
 
-    parking_total_before_discount = calculate_parking_total(
-        minutes=parking_minutes,
-        first_hour_price=ticket.parking_first_hour_price_snapshot,
-        block_price=ticket.parking_block_price_snapshot,
-        block_minutes=ticket.parking_block_minutes_snapshot,
-    )
+        parking_total = parking_total_before_discount - ticket.discount_amount
 
-    parking_total = parking_total_before_discount - ticket.discount_amount
+        if parking_total < Decimal("0.00"):
+            parking_total = Decimal("0.00")
 
-    if parking_total < Decimal("0.00"):
-        parking_total = Decimal("0.00")
+        tax_data = calculate_tax_from_total(
+            total_with_tax=parking_total,
+            tax_rate=ticket.tax_rate,
+        )
 
-    tax_data = calculate_tax_from_total(
-        total_with_tax=parking_total,
-        tax_rate=ticket.tax_rate,
-    )
+        ticket_kind = "parqueo prepago"
+
+    else:
+        elapsed_seconds = (exit_at - ticket.parking_entry_at).total_seconds()
+        parking_minutes = int(elapsed_seconds // 60)
+
+        if parking_minutes < 1:
+            parking_minutes = 1
+
+        parking_total_before_discount = calculate_parking_total(
+            minutes=parking_minutes,
+            first_hour_price=ticket.parking_first_hour_price_snapshot,
+            block_price=ticket.parking_block_price_snapshot,
+            block_minutes=ticket.parking_block_minutes_snapshot,
+        )
+
+        parking_total = parking_total_before_discount - ticket.discount_amount
+
+        if parking_total < Decimal("0.00"):
+            parking_total = Decimal("0.00")
+
+        tax_data = calculate_tax_from_total(
+            total_with_tax=parking_total,
+            tax_rate=ticket.tax_rate,
+        )
+
+        ticket_kind = "parqueo"
 
     if request.method == "POST":
         form = ChargeWithoutCodeForm(
@@ -1023,6 +1178,7 @@ def charge_parking_without_code(request, ticket_id):
                     entity_id=ticket.id,
                     old_values={
                         "status": ticket.status,
+                        "parking_mode": ticket.parking_mode,
                     },
                     new_values={
                         "attempt": "invalid_authorization_for_parking_without_code",
@@ -1041,7 +1197,7 @@ def charge_parking_without_code(request, ticket_id):
                     {
                         "ticket": ticket,
                         "form": form,
-                        "ticket_kind": "parqueo",
+                        "ticket_kind": ticket_kind,
                         "exit_at": exit_at,
                         "parking_minutes": parking_minutes,
                         "parking_total": parking_total,
@@ -1052,6 +1208,7 @@ def charge_parking_without_code(request, ticket_id):
 
             old_values = {
                 "status": ticket.status,
+                "parking_mode": ticket.parking_mode,
                 "parking_exit_at": str(ticket.parking_exit_at),
                 "parking_minutes": ticket.parking_minutes,
                 "subtotal_without_tax": str(ticket.subtotal_without_tax),
@@ -1060,6 +1217,15 @@ def charge_parking_without_code(request, ticket_id):
                 "ticket_cash_day": str(ticket.cash_day.business_date),
                 "payment": None,
             }
+
+            if is_prepaid_parking:
+                old_values.update(
+                    {
+                        "prepaid_start_at": str(ticket.prepaid_start_at),
+                        "prepaid_end_at": str(ticket.prepaid_end_at),
+                        "prepaid_plan": ticket.prepaid_plan_name_snapshot,
+                    }
+                )
 
             payment_cash_day = get_or_create_today_cash_day_for_operation()
 
@@ -1081,28 +1247,75 @@ def charge_parking_without_code(request, ticket_id):
 
             ticket.cash_day = payment_cash_day
             ticket.status = Ticket.PAID
-            ticket.parking_exit_at = exit_at
-            ticket.parking_minutes = parking_minutes
             ticket.subtotal_without_tax = tax_data["subtotal_without_tax"]
             ticket.tax_amount = tax_data["tax_amount"]
             ticket.total_with_tax = tax_data["total_with_tax"]
             ticket.paid_at = exit_at
             ticket.updated_by_employee = request.user
 
+            update_fields = [
+                "cash_day",
+                "status",
+                "subtotal_without_tax",
+                "tax_amount",
+                "total_with_tax",
+                "paid_at",
+                "updated_by_employee",
+                "updated_at",
+            ]
+
+            if not is_prepaid_parking:
+                ticket.parking_exit_at = exit_at
+                ticket.parking_minutes = parking_minutes
+
+                update_fields.extend(
+                    [
+                        "parking_exit_at",
+                        "parking_minutes",
+                    ]
+                )
+
             ticket.save(
-                update_fields=[
-                    "cash_day",
-                    "status",
-                    "parking_exit_at",
-                    "parking_minutes",
-                    "subtotal_without_tax",
-                    "tax_amount",
-                    "total_with_tax",
-                    "paid_at",
-                    "updated_by_employee",
-                    "updated_at",
-                ]
+                update_fields=update_fields
             )
+
+            new_values = {
+                "status": ticket.status,
+                "parking_mode": ticket.parking_mode,
+                "ticket_cash_day": str(ticket.cash_day.business_date),
+                "payment": {
+                    "method": payment_method,
+                    "amount": str(parking_total),
+                    "sinpe_reference": sinpe_reference,
+                    "cash_day": str(payment_cash_day.business_date),
+                },
+                "subtotal_without_tax": str(ticket.subtotal_without_tax),
+                "tax_amount": str(ticket.tax_amount),
+                "total_with_tax": str(ticket.total_with_tax),
+                "authorized_by_employee": (
+                    final_authorizer.username
+                    if final_authorizer
+                    else None
+                ),
+                "used_otp": otp_usage is not None,
+            }
+
+            if is_prepaid_parking:
+                new_values.update(
+                    {
+                        "prepaid_start_at": str(ticket.prepaid_start_at),
+                        "prepaid_end_at": str(ticket.prepaid_end_at),
+                        "prepaid_plan": ticket.prepaid_plan_name_snapshot,
+                    }
+                )
+            else:
+                new_values.update(
+                    {
+                        "parking_entry_at": str(ticket.parking_entry_at),
+                        "parking_exit_at": str(ticket.parking_exit_at),
+                        "parking_minutes": ticket.parking_minutes,
+                    }
+                )
 
             AuditLog.objects.create(
                 employee=request.user,
@@ -1112,34 +1325,13 @@ def charge_parking_without_code(request, ticket_id):
                 entity_type="Ticket",
                 entity_id=ticket.id,
                 old_values=old_values,
-                new_values={
-                    "status": ticket.status,
-                    "ticket_cash_day": str(ticket.cash_day.business_date),
-                    "parking_entry_at": str(ticket.parking_entry_at),
-                    "parking_exit_at": str(ticket.parking_exit_at),
-                    "parking_minutes": ticket.parking_minutes,
-                    "payment": {
-                        "method": payment_method,
-                        "amount": str(parking_total),
-                        "sinpe_reference": sinpe_reference,
-                        "cash_day": str(payment_cash_day.business_date),
-                    },
-                    "subtotal_without_tax": str(ticket.subtotal_without_tax),
-                    "tax_amount": str(ticket.tax_amount),
-                    "total_with_tax": str(ticket.total_with_tax),
-                    "authorized_by_employee": (
-                        final_authorizer.username
-                        if final_authorizer
-                        else None
-                    ),
-                    "used_otp": otp_usage is not None,
-                },
+                new_values=new_values,
                 reason=reason,
             )
 
             messages.success(
                 request,
-                f"Ticket de parqueo {ticket.ticket_number} cobrado sin código correctamente.",
+                f"Ticket de {ticket_kind} {ticket.ticket_number} cobrado sin código correctamente.",
             )
 
             return redirect(next_url)
@@ -1155,7 +1347,7 @@ def charge_parking_without_code(request, ticket_id):
         {
             "ticket": ticket,
             "form": form,
-            "ticket_kind": "parqueo",
+            "ticket_kind": ticket_kind,
             "exit_at": exit_at,
             "parking_minutes": parking_minutes,
             "parking_total": parking_total,
@@ -1169,10 +1361,13 @@ def charge_parking_without_code(request, ticket_id):
 def all_tickets(request):
     date = request.GET.get("date", "").strip()
     ticket_type = request.GET.get("ticket_type", "").strip()
+    parking_mode = request.GET.get("parking_mode", "").strip()
     status = request.GET.get("status", "").strip()
     employee_id = request.GET.get("employee", "").strip()
     time_from = request.GET.get("time_from", "").strip()
     time_to = request.GET.get("time_to", "").strip()
+    created_from = request.GET.get("created_from", "").strip()
+    created_to = request.GET.get("created_to", "").strip()
     search = request.GET.get("search", "").strip()
 
     tickets = (
@@ -1187,26 +1382,40 @@ def all_tickets(request):
         .order_by("-created_at")
     )
 
+    # Fecha de caja / día operativo.
     if date:
         tickets = tickets.filter(
             cash_day__business_date=date,
         )
 
+    # Tipo general: lavado / parqueo.
     if ticket_type:
         tickets = tickets.filter(
             ticket_type=ticket_type,
         )
 
+    # Modo de parqueo: por horas / prepago.
+    # Solo aplica realmente a tickets de parqueo.
+    if parking_mode:
+        tickets = tickets.filter(
+            ticket_type=Ticket.PARKING,
+            parking_mode=parking_mode,
+        )
+
+    # Estado: pendiente / activo / pagado / anulado.
     if status:
         tickets = tickets.filter(
             status=status,
         )
 
+    # Empleado creador.
     if employee_id:
         tickets = tickets.filter(
             created_by_employee_id=employee_id,
         )
 
+    # Rango por hora del día.
+    # Ejemplo: de 08:00 a 17:00, sin importar la fecha.
     if time_from:
         tickets = tickets.filter(
             created_at__time__gte=time_from,
@@ -1217,12 +1426,49 @@ def all_tickets(request):
             created_at__time__lte=time_to,
         )
 
+    # Rango por fecha y hora exacta de creación.
+    # Ejemplo: desde 2026-07-11 08:00 hasta 2026-07-11 18:00.
+    created_from_dt = None
+    created_to_dt = None
+
+    if created_from:
+        created_from_dt = parse_datetime(created_from)
+
+        if created_from_dt and timezone.is_naive(created_from_dt):
+            created_from_dt = timezone.make_aware(
+                created_from_dt,
+                timezone.get_current_timezone(),
+            )
+
+        if created_from_dt:
+            tickets = tickets.filter(
+                created_at__gte=created_from_dt,
+            )
+
+    if created_to:
+        created_to_dt = parse_datetime(created_to)
+
+        if created_to_dt and timezone.is_naive(created_to_dt):
+            created_to_dt = timezone.make_aware(
+                created_to_dt,
+                timezone.get_current_timezone(),
+            )
+
+        if created_to_dt:
+            tickets = tickets.filter(
+                created_at__lte=created_to_dt,
+            )
+
+    # Buscador general.
     if search:
         tickets = tickets.filter(
             Q(ticket_number__icontains=search)
             | Q(vehicle_plate__icontains=search)
             | Q(customer_name_snapshot__icontains=search)
             | Q(customer_phone_snapshot__icontains=search)
+            | Q(service_name_snapshot__icontains=search)
+            | Q(prepaid_plan_name_snapshot__icontains=search)
+            | Q(prepaid_description__icontains=search)
         )
 
     tickets = list(tickets[:100])
@@ -1230,8 +1476,24 @@ def all_tickets(request):
     for ticket in tickets:
         ticket.display_total_with_tax = ticket.total_with_tax
         ticket.display_parking_minutes = ticket.parking_minutes or 0
+        ticket.display_ticket_mode_label = ""
 
-        if ticket.ticket_type == Ticket.PARKING and ticket.status == Ticket.ACTIVE:
+        if ticket.ticket_type == Ticket.WASH:
+            ticket.display_ticket_mode_label = "Lavado"
+
+        elif ticket.ticket_type == Ticket.PARKING and ticket.parking_mode == Ticket.PREPAID:
+            ticket.display_ticket_mode_label = "Parqueo prepago"
+
+        elif ticket.ticket_type == Ticket.PARKING:
+            ticket.display_ticket_mode_label = "Parqueo por horas"
+
+        # Solo el parqueo por horas activo necesita total dinámico.
+        # El prepago tiene precio fijo y ya guarda su total en ticket.total_with_tax.
+        if (
+            ticket.ticket_type == Ticket.PARKING
+            and ticket.parking_mode == Ticket.HOURLY
+            and ticket.status == Ticket.ACTIVE
+        ):
             now = timezone.now()
 
             if ticket.parking_entry_at:
@@ -1253,6 +1515,7 @@ def all_tickets(request):
                 ticket.parking_block_price_snapshot
                 or Decimal("1000.00")
             )
+
             block_minutes = ticket.parking_block_minutes_snapshot or 60
 
             if parking_minutes <= 60:
@@ -1275,6 +1538,12 @@ def all_tickets(request):
         is_active=True,
     ).order_by("username")
 
+    parking_mode_choices = [
+        ("", "Todos"),
+        (Ticket.HOURLY, "Parqueo por horas"),
+        (Ticket.PREPAID, "Parqueo prepago"),
+    ]
+
     return render(
         request,
         "tickets/all_tickets.html",
@@ -1282,18 +1551,21 @@ def all_tickets(request):
             "tickets": tickets,
             "date": date,
             "ticket_type": ticket_type,
+            "parking_mode": parking_mode,
             "status": status,
             "employee_id": employee_id,
             "time_from": time_from,
             "time_to": time_to,
+            "created_from": created_from,
+            "created_to": created_to,
             "search": search,
             "employees": employees,
             "ticket_type_choices": Ticket.TICKET_TYPE_CHOICES,
+            "parking_mode_choices": parking_mode_choices,
             "status_choices": Ticket.STATUS_CHOICES,
             "result_limit": 100,
         },
     )
-
 #se cancelan tickets
 @login_required
 @transaction.atomic
@@ -1957,6 +2229,7 @@ def edit_wash_ticket(request, ticket_id):
 @transaction.atomic
 def edit_parking_ticket(request, ticket_id):
     next_url = get_next_url(request)
+
     ticket = get_object_or_404(
         Ticket.objects.select_related(
             "customer",
@@ -1968,12 +2241,23 @@ def edit_parking_ticket(request, ticket_id):
         ticket_type=Ticket.PARKING,
     )
 
-    if ticket.status != Ticket.ACTIVE:
-        messages.error(
-            request,
-            "Solo se pueden editar parqueos activos.",
-        )
-        return redirect("tickets:parking_ticket_detail", ticket_id=ticket.id)
+    is_prepaid_parking = ticket.parking_mode == Ticket.PREPAID
+
+    if is_prepaid_parking:
+        if ticket.status != Ticket.PENDING_PAYMENT:
+            messages.error(
+                request,
+                "Solo se pueden editar parqueos prepagos pendientes de pago.",
+            )
+            return redirect("tickets:parking_ticket_detail", ticket_id=ticket.id)
+
+    else:
+        if ticket.status != Ticket.ACTIVE:
+            messages.error(
+                request,
+                "Solo se pueden editar parqueos activos.",
+            )
+            return redirect("tickets:parking_ticket_detail", ticket_id=ticket.id)
 
     if request.method == "POST":
         form = EditParkingTicketForm(
@@ -2005,6 +2289,21 @@ def edit_parking_ticket(request, ticket_id):
                     "El OTP ingresado no es correcto.",
                 )
 
+                old_attempt_values = {
+                    "status": ticket.status,
+                    "parking_mode": ticket.parking_mode,
+                    "parking_entry_at": str(ticket.parking_entry_at),
+                }
+
+                if is_prepaid_parking:
+                    old_attempt_values.update(
+                        {
+                            "prepaid_start_at": str(ticket.prepaid_start_at),
+                            "prepaid_end_at": str(ticket.prepaid_end_at),
+                            "prepaid_plan": ticket.prepaid_plan_name_snapshot,
+                        }
+                    )
+
                 AuditLog.objects.create(
                     employee=request.user,
                     ticket=ticket,
@@ -2012,10 +2311,7 @@ def edit_parking_ticket(request, ticket_id):
                     action_type=AuditLog.EDIT_TICKET,
                     entity_type="Ticket",
                     entity_id=ticket.id,
-                    old_values={
-                        "status": ticket.status,
-                        "parking_entry_at": str(ticket.parking_entry_at),
-                    },
+                    old_values=old_attempt_values,
                     new_values={
                         "attempt": "invalid_authorization_for_edit_parking_ticket",
                         "authorized_by_employee": (
@@ -2041,10 +2337,28 @@ def edit_parking_ticket(request, ticket_id):
                 "customer_name": ticket.customer_name_snapshot,
                 "customer_phone": ticket.customer_phone_snapshot,
                 "vehicle_plate": ticket.vehicle_plate,
+                "parking_mode": ticket.parking_mode,
                 "parking_entry_at": str(ticket.parking_entry_at),
                 "status": ticket.status,
+                "subtotal_without_tax": str(ticket.subtotal_without_tax),
+                "tax_amount": str(ticket.tax_amount),
                 "total_with_tax": str(ticket.total_with_tax),
             }
+
+            if is_prepaid_parking:
+                old_values.update(
+                    {
+                        "prepaid_start_at": str(ticket.prepaid_start_at),
+                        "prepaid_end_at": str(ticket.prepaid_end_at),
+                        "prepaid_description": ticket.prepaid_description,
+                        "prepaid_plan_name_snapshot": ticket.prepaid_plan_name_snapshot,
+                        "prepaid_plan_duration_quantity_snapshot": ticket.prepaid_plan_duration_quantity_snapshot,
+                        "prepaid_plan_duration_unit_snapshot": ticket.prepaid_plan_duration_unit_snapshot,
+                        "prepaid_plan_price_with_tax_snapshot": str(
+                            ticket.prepaid_plan_price_with_tax_snapshot
+                        ),
+                    }
+                )
 
             customer_name = form.cleaned_data["customer_name"]
             customer_phone = form.cleaned_data["customer_phone"]
@@ -2061,27 +2375,92 @@ def edit_parking_ticket(request, ticket_id):
                     ]
                 )
 
+            elif customer_name or customer_phone:
+                ticket.customer = Customer.objects.create(
+                    full_name=customer_name,
+                    phone=customer_phone,
+                )
+
             ticket.customer_name_snapshot = customer_name
             ticket.customer_phone_snapshot = customer_phone
             ticket.vehicle_plate = vehicle_plate
             ticket.updated_by_employee = request.user
 
+            update_fields = [
+                "customer",
+                "customer_name_snapshot",
+                "customer_phone_snapshot",
+                "vehicle_plate",
+                "updated_by_employee",
+                "updated_at",
+            ]
+
+            if is_prepaid_parking:
+                prepaid_plan = form.cleaned_data.get("prepaid_plan")
+                prepaid_start_at = form.cleaned_data.get("prepaid_start_at")
+
+                if prepaid_plan:
+                    prepaid_end_at = calculate_prepaid_end_at(
+                        prepaid_start_at,
+                        prepaid_plan,
+                    )
+
+                    total_with_tax = prepaid_plan.price_with_tax
+                    tax_rate = prepaid_plan.tax_rate
+
+                    tax_data = calculate_tax_from_total(
+                        total_with_tax=total_with_tax,
+                        tax_rate=tax_rate,
+                    )
+
+                    ticket.service_name_snapshot = prepaid_plan.name
+                    ticket.service_price_with_tax_snapshot = tax_data["total_with_tax"]
+
+                    ticket.subtotal_without_tax = tax_data["subtotal_without_tax"]
+                    ticket.tax_rate = tax_rate
+                    ticket.tax_amount = tax_data["tax_amount"]
+                    ticket.total_with_tax = tax_data["total_with_tax"]
+
+                    ticket.prepaid_start_at = prepaid_start_at
+                    ticket.prepaid_end_at = prepaid_end_at
+                    ticket.prepaid_description = prepaid_plan.name
+
+                    ticket.prepaid_plan_name_snapshot = prepaid_plan.name
+                    ticket.prepaid_plan_duration_quantity_snapshot = prepaid_plan.duration_quantity
+                    ticket.prepaid_plan_duration_unit_snapshot = prepaid_plan.duration_unit
+                    ticket.prepaid_plan_price_with_tax_snapshot = prepaid_plan.price_with_tax
+
+                    update_fields.extend(
+                        [
+                            "service_name_snapshot",
+                            "service_price_with_tax_snapshot",
+                            "subtotal_without_tax",
+                            "tax_rate",
+                            "tax_amount",
+                            "total_with_tax",
+                            "prepaid_start_at",
+                            "prepaid_end_at",
+                            "prepaid_description",
+                            "prepaid_plan_name_snapshot",
+                            "prepaid_plan_duration_quantity_snapshot",
+                            "prepaid_plan_duration_unit_snapshot",
+                            "prepaid_plan_price_with_tax_snapshot",
+                        ]
+                    )
+
             ticket.save(
-                update_fields=[
-                    "customer_name_snapshot",
-                    "customer_phone_snapshot",
-                    "vehicle_plate",
-                    "updated_by_employee",
-                    "updated_at",
-                ]
+                update_fields=update_fields
             )
 
             new_values = {
                 "customer_name": ticket.customer_name_snapshot,
                 "customer_phone": ticket.customer_phone_snapshot,
                 "vehicle_plate": ticket.vehicle_plate,
+                "parking_mode": ticket.parking_mode,
                 "parking_entry_at": str(ticket.parking_entry_at),
                 "status": ticket.status,
+                "subtotal_without_tax": str(ticket.subtotal_without_tax),
+                "tax_amount": str(ticket.tax_amount),
                 "total_with_tax": str(ticket.total_with_tax),
                 "authorized_by_employee": (
                     final_authorizer.username
@@ -2090,6 +2469,21 @@ def edit_parking_ticket(request, ticket_id):
                 ),
                 "used_otp": otp_usage is not None,
             }
+
+            if is_prepaid_parking:
+                new_values.update(
+                    {
+                        "prepaid_start_at": str(ticket.prepaid_start_at),
+                        "prepaid_end_at": str(ticket.prepaid_end_at),
+                        "prepaid_description": ticket.prepaid_description,
+                        "prepaid_plan_name_snapshot": ticket.prepaid_plan_name_snapshot,
+                        "prepaid_plan_duration_quantity_snapshot": ticket.prepaid_plan_duration_quantity_snapshot,
+                        "prepaid_plan_duration_unit_snapshot": ticket.prepaid_plan_duration_unit_snapshot,
+                        "prepaid_plan_price_with_tax_snapshot": str(
+                            ticket.prepaid_plan_price_with_tax_snapshot
+                        ),
+                    }
+                )
 
             AuditLog.objects.create(
                 employee=request.user,
@@ -2103,10 +2497,16 @@ def edit_parking_ticket(request, ticket_id):
                 reason=reason,
             )
 
-            messages.success(
-                request,
-                f"Ticket de parqueo {ticket.ticket_number} editado correctamente.",
-            )
+            if is_prepaid_parking:
+                messages.success(
+                    request,
+                    f"Ticket de parqueo prepago {ticket.ticket_number} editado correctamente.",
+                )
+            else:
+                messages.success(
+                    request,
+                    f"Ticket de parqueo {ticket.ticket_number} editado correctamente.",
+                )
 
             return redirect(next_url)
 
@@ -2132,7 +2532,6 @@ def edit_parking_ticket(request, ticket_id):
 def apply_discount(request, ticket_id):
     next_url = get_next_url(request)
 
-
     ticket = get_object_or_404(
         Ticket.objects.select_related(
             "customer",
@@ -2148,16 +2547,32 @@ def apply_discount(request, ticket_id):
             request,
             "Solo se pueden aplicar descuentos a tickets pendientes o parqueos activos.",
         )
-
-        if ticket.ticket_type == Ticket.WASH:
-            return redirect(next_url)
-
         return redirect(next_url)
-    
+
+    is_prepaid_parking = (
+        ticket.ticket_type == Ticket.PARKING
+        and ticket.parking_mode == Ticket.PREPAID
+    )
+
+    is_hourly_parking = (
+        ticket.ticket_type == Ticket.PARKING
+        and ticket.parking_mode == Ticket.HOURLY
+    )
+
     parking_current_total = ticket.total_with_tax
     parking_current_minutes = ticket.parking_minutes or 0
 
-    if ticket.ticket_type == Ticket.PARKING and ticket.status == Ticket.ACTIVE:
+    # Parqueo prepago: el total base es fijo, sale del plan.
+    if is_prepaid_parking:
+        parking_current_total = (
+            ticket.prepaid_plan_price_with_tax_snapshot
+            or ticket.service_price_with_tax_snapshot
+            or (ticket.total_with_tax + ticket.discount_amount)
+        )
+        parking_current_minutes = 0
+
+    # Parqueo por horas activo: el total base se calcula con el tiempo actual.
+    elif is_hourly_parking and ticket.status == Ticket.ACTIVE:
         now = timezone.now()
 
         if ticket.parking_entry_at:
@@ -2177,10 +2592,11 @@ def apply_discount(request, ticket_id):
         if parking_current_minutes <= 60:
             parking_current_total = first_hour_price
         else:
-            extra_minutes = parking_current_minutes - 60
             extra_blocks = ((parking_current_minutes - 60) // block_minutes) + 1
-            parking_current_total = first_hour_price + (Decimal(extra_blocks) * block_price)
-    
+            parking_current_total = first_hour_price + (
+                Decimal(extra_blocks) * block_price
+            )
+
     parking_total_after_discount = parking_current_total - ticket.discount_amount
 
     if parking_total_after_discount < Decimal("0.00"):
@@ -2232,6 +2648,7 @@ def apply_discount(request, ticket_id):
                     old_values={
                         "discount_amount": str(ticket.discount_amount),
                         "total_with_tax": str(ticket.total_with_tax),
+                        "parking_mode": ticket.parking_mode,
                     },
                     new_values={
                         "attempt": "invalid_authorization_for_apply_discount",
@@ -2262,8 +2679,10 @@ def apply_discount(request, ticket_id):
                 "subtotal_without_tax": str(ticket.subtotal_without_tax),
                 "tax_amount": str(ticket.tax_amount),
                 "total_with_tax": str(ticket.total_with_tax),
+                "parking_mode": ticket.parking_mode,
             }
 
+            # Lavado pendiente: el descuento se aplica sobre servicio + extras.
             if ticket.ticket_type == Ticket.WASH:
                 gross_total = ticket.service_price_with_tax_snapshot
 
@@ -2313,12 +2732,65 @@ def apply_discount(request, ticket_id):
                     ]
                 )
 
+            # Parqueo prepago pendiente: el descuento se aplica sobre el precio fijo del plan.
+            elif is_prepaid_parking:
+                gross_total = (
+                    ticket.prepaid_plan_price_with_tax_snapshot
+                    or ticket.service_price_with_tax_snapshot
+                    or (ticket.total_with_tax + ticket.discount_amount)
+                )
+
+                if discount_amount > gross_total:
+                    form.add_error(
+                        "discount_amount",
+                        f"El descuento no puede ser mayor al total del parqueo prepago: ₡{gross_total}.",
+                    )
+
+                    return render(
+                        request,
+                        "tickets/apply_discount.html",
+                        {
+                            "ticket": ticket,
+                            "form": form,
+                            "next_url": next_url,
+                            "parking_current_total": parking_current_total,
+                            "parking_current_minutes": parking_current_minutes,
+                            "parking_total_after_discount": parking_total_after_discount,
+                        },
+                    )
+
+                new_total = gross_total - discount_amount
+
+                tax_data = calculate_tax_from_total(
+                    total_with_tax=new_total,
+                    tax_rate=ticket.tax_rate,
+                )
+
+                ticket.discount_amount = discount_amount
+                ticket.subtotal_without_tax = tax_data["subtotal_without_tax"]
+                ticket.tax_amount = tax_data["tax_amount"]
+                ticket.total_with_tax = tax_data["total_with_tax"]
+                ticket.updated_by_employee = request.user
+
+                ticket.save(
+                    update_fields=[
+                        "discount_amount",
+                        "subtotal_without_tax",
+                        "tax_amount",
+                        "total_with_tax",
+                        "updated_by_employee",
+                        "updated_at",
+                    ]
+                )
+
+            # Parqueo por horas activo: solo se guarda el descuento.
+            # El total final se recalcula al cobrar, porque cambia con el tiempo.
             else:
                 if discount_amount > parking_current_total:
                     form.add_error(
                         "discount_amount",
                         f"El descuento no puede ser mayor al monto actual del parqueo: ₡{parking_current_total}.",
-                    )       
+                    )
 
                     return render(
                         request,
@@ -2344,29 +2816,41 @@ def apply_discount(request, ticket_id):
                     ]
                 )
 
-                AuditLog.objects.create(
-                    employee=request.user,
-                    ticket=ticket,
-                    otp_usage=otp_usage,
-                    action_type=AuditLog.APPLY_DISCOUNT,
-                    entity_type="Ticket",
-                    entity_id=ticket.id,
-                    old_values=old_values,
-                    new_values={
-                        "discount_amount": str(ticket.discount_amount),
-                        "subtotal_without_tax": str(ticket.subtotal_without_tax),
-                        "tax_amount": str(ticket.tax_amount),
-                        "total_with_tax": str(ticket.total_with_tax),
-                        "remove_discount": remove_discount,
-                        "authorized_by_employee": (
-                            final_authorizer.username
-                            if final_authorizer
-                            else None
-                        ),
-                        "used_otp": otp_usage is not None,
-                    },
-                    reason=reason,
+            new_values = {
+                "discount_amount": str(ticket.discount_amount),
+                "subtotal_without_tax": str(ticket.subtotal_without_tax),
+                "tax_amount": str(ticket.tax_amount),
+                "total_with_tax": str(ticket.total_with_tax),
+                "parking_mode": ticket.parking_mode,
+                "remove_discount": remove_discount,
+                "authorized_by_employee": (
+                    final_authorizer.username
+                    if final_authorizer
+                    else None
+                ),
+                "used_otp": otp_usage is not None,
+            }
+
+            if is_prepaid_parking:
+                new_values.update(
+                    {
+                        "prepaid_plan": ticket.prepaid_plan_name_snapshot,
+                        "prepaid_start_at": str(ticket.prepaid_start_at),
+                        "prepaid_end_at": str(ticket.prepaid_end_at),
+                    }
                 )
+
+            AuditLog.objects.create(
+                employee=request.user,
+                ticket=ticket,
+                otp_usage=otp_usage,
+                action_type=AuditLog.APPLY_DISCOUNT,
+                entity_type="Ticket",
+                entity_id=ticket.id,
+                old_values=old_values,
+                new_values=new_values,
+                reason=reason,
+            )
 
             if discount_amount == Decimal("0.00"):
                 messages.success(
@@ -2378,9 +2862,6 @@ def apply_discount(request, ticket_id):
                     request,
                     f"Descuento actualizado correctamente en el ticket {ticket.ticket_number}.",
                 )
-
-            if ticket.ticket_type == Ticket.WASH:
-                return redirect(next_url)
 
             return redirect(next_url)
 
@@ -2402,6 +2883,7 @@ def apply_discount(request, ticket_id):
             "parking_total_after_discount": parking_total_after_discount,
         },
     )
+
 
 @login_required
 @transaction.atomic
@@ -2452,6 +2934,8 @@ def reopen_ticket(request, ticket_id):
         old_values = {
             "status": ticket.status,
             "paid_at": str(ticket.paid_at),
+            "ticket_type": ticket.ticket_type,
+            "parking_mode": ticket.parking_mode,
             "ticket_cash_day": (
                 str(ticket.cash_day.business_date)
                 if ticket.cash_day
@@ -2459,6 +2943,16 @@ def reopen_ticket(request, ticket_id):
             ),
             "payment": None,
         }
+
+        if ticket.ticket_type == Ticket.PARKING and ticket.parking_mode == Ticket.PREPAID:
+            old_values.update(
+                {
+                    "prepaid_plan": ticket.prepaid_plan_name_snapshot,
+                    "prepaid_start_at": str(ticket.prepaid_start_at),
+                    "prepaid_end_at": str(ticket.prepaid_end_at),
+                    "prepaid_validity_status": ticket.prepaid_validity_status,
+                }
+            )
 
         if payment:
             old_values["payment"] = {
@@ -2475,12 +2969,20 @@ def reopen_ticket(request, ticket_id):
 
         if ticket.ticket_type == Ticket.WASH:
             new_status = Ticket.PENDING_PAYMENT
-        else:
+
+        elif ticket.ticket_type == Ticket.PARKING and ticket.parking_mode == Ticket.PREPAID:
+            new_status = Ticket.PENDING_PAYMENT
+
+        elif ticket.ticket_type == Ticket.PARKING:
             new_status = Ticket.ACTIVE
+
+        else:
+            new_status = Ticket.PENDING_PAYMENT
 
         ticket.status = new_status
         ticket.paid_at = None
         ticket.updated_by_employee = request.user
+
         ticket.save(
             update_fields=[
                 "status",
@@ -2490,6 +2992,26 @@ def reopen_ticket(request, ticket_id):
             ]
         )
 
+        new_values = {
+            "status": ticket.status,
+            "paid_at": None,
+            "ticket_type": ticket.ticket_type,
+            "parking_mode": ticket.parking_mode,
+            "payment": None,
+            "message": "El ticket fue reabierto y el pago anterior fue removido de la caja.",
+        }
+
+        if ticket.ticket_type == Ticket.PARKING and ticket.parking_mode == Ticket.PREPAID:
+            new_values.update(
+                {
+                    "prepaid_plan": ticket.prepaid_plan_name_snapshot,
+                    "prepaid_start_at": str(ticket.prepaid_start_at),
+                    "prepaid_end_at": str(ticket.prepaid_end_at),
+                    "prepaid_validity_status": ticket.prepaid_validity_status,
+                    "message": "El parqueo prepago fue reabierto como pendiente de pago y el pago anterior fue removido de la caja.",
+                }
+            )
+
         AuditLog.objects.create(
             employee=request.user,
             ticket=ticket,
@@ -2497,12 +3019,7 @@ def reopen_ticket(request, ticket_id):
             entity_type="Ticket",
             entity_id=str(ticket.id),
             old_values=old_values,
-            new_values={
-                "status": ticket.status,
-                "paid_at": None,
-                "payment": None,
-                "message": "El ticket fue reabierto y el pago anterior fue removido de la caja.",
-            },
+            new_values=new_values,
             reason=reason,
         )
 
@@ -2521,3 +3038,193 @@ def reopen_ticket(request, ticket_id):
             "next_url": next_url,
         },
     )
+
+@login_required
+@transaction.atomic
+def create_prepaid_parking_ticket(request):
+    next_url = get_next_url(request)
+
+    cash_day = get_or_create_today_cash_day_for_operation()
+
+    if not cash_day_allows_operations(cash_day):
+        messages.error(
+            request,
+            automatic_close_message(),
+        )
+        return redirect("home")
+
+    parking_service = (
+        Service.objects
+        .filter(
+            service_type=Service.PARKING,
+            is_active=True,
+        )
+        .order_by("id")
+        .first()
+    )
+
+    if not parking_service:
+        messages.error(
+            request,
+            "No existe un servicio de parqueo activo en el catálogo.",
+        )
+        return redirect("home")
+
+    if request.method == "POST":
+        form = PrepaidParkingTicketForm(request.POST)
+
+        if form.is_valid():
+            customer_name = form.cleaned_data["customer_name"]
+            customer_phone = form.cleaned_data["customer_phone"]
+            vehicle_plate = form.cleaned_data["vehicle_plate"]
+            prepaid_plan = form.cleaned_data["prepaid_plan"]
+            prepaid_start_at = form.cleaned_data["prepaid_start_at"]
+
+            prepaid_end_at = calculate_prepaid_end_at(
+                prepaid_start_at,
+                prepaid_plan,
+            )
+
+            total_with_tax = prepaid_plan.price_with_tax
+            tax_rate = prepaid_plan.tax_rate
+
+            tax_data = calculate_tax_from_total(
+                total_with_tax,
+                tax_rate,
+            )
+
+            subtotal_without_tax = tax_data["subtotal_without_tax"]
+            tax_amount = tax_data["tax_amount"]
+            total_with_tax = tax_data["total_with_tax"]
+
+            customer = None
+
+            if customer_name or customer_phone:
+                customer = Customer.objects.create(
+                    full_name=customer_name,
+                    phone=customer_phone,
+                )
+
+            # Usa aquí las mismas funciones que ya tienes para generar
+            # el código de cierre en lavado/parqueo normal.
+            closing_code = generate_closing_code()
+            closing_code = generate_closing_code()
+
+            ticket = Ticket.objects.create(
+                ticket_number=generate_ticket_number("PP"),
+                ticket_type=Ticket.PARKING,
+                parking_mode=Ticket.PREPAID,
+                status=Ticket.PENDING_PAYMENT,
+
+                customer=customer,
+                service=parking_service,
+                cash_day=cash_day,
+
+                customer_name_snapshot=customer_name,
+                customer_phone_snapshot=customer_phone,
+                vehicle_plate=vehicle_plate,
+
+                service_name_snapshot=prepaid_plan.name,
+                service_price_with_tax_snapshot=total_with_tax,
+
+                subtotal_without_tax=subtotal_without_tax,
+                tax_rate=tax_rate,
+                tax_amount=tax_amount,
+                discount_amount=Decimal("0.00"),
+                total_with_tax=total_with_tax,
+
+                closing_code_hash=make_password(closing_code),
+                closing_code_for_print=closing_code,
+
+                parking_entry_at=None,
+                parking_exit_at=None,
+                parking_minutes=None,
+
+                parking_first_hour_price_snapshot=None,
+                parking_block_price_snapshot=None,
+                parking_block_minutes_snapshot=None,
+
+                prepaid_start_at=prepaid_start_at,
+                prepaid_end_at=prepaid_end_at,
+                prepaid_description=prepaid_plan.name,
+
+                prepaid_plan_name_snapshot=prepaid_plan.name,
+                prepaid_plan_duration_quantity_snapshot=prepaid_plan.duration_quantity,
+                prepaid_plan_duration_unit_snapshot=prepaid_plan.duration_unit,
+                prepaid_plan_price_with_tax_snapshot=prepaid_plan.price_with_tax,
+
+                created_by_employee=request.user,
+                updated_by_employee=request.user,
+                paid_at=None,
+            )
+
+            AuditLog.objects.create(
+                employee=request.user,
+                ticket=ticket,
+                action_type=AuditLog.CREATE_PARKING_TICKET,
+                entity_type="Ticket",
+                entity_id=ticket.id,
+                old_values=None,
+                new_values={
+                    "ticket_number": ticket.ticket_number,
+                    "ticket_type": ticket.ticket_type,
+                    "parking_mode": ticket.parking_mode,
+                    "status": ticket.status,
+                    "customer_name": ticket.customer_name_snapshot,
+                    "customer_phone": ticket.customer_phone_snapshot,
+                    "vehicle_plate": ticket.vehicle_plate,
+                    "service_name_snapshot": ticket.service_name_snapshot,
+                    "service_price_with_tax_snapshot": str(ticket.service_price_with_tax_snapshot),
+                    "subtotal_without_tax": str(ticket.subtotal_without_tax),
+                    "tax_rate": str(ticket.tax_rate),
+                    "tax_amount": str(ticket.tax_amount),
+                    "discount_amount": str(ticket.discount_amount),
+                    "total_with_tax": str(ticket.total_with_tax),
+                    "prepaid_start_at": str(ticket.prepaid_start_at),
+                    "prepaid_end_at": str(ticket.prepaid_end_at),
+                    "prepaid_description": ticket.prepaid_description,
+                    "prepaid_plan_name_snapshot": ticket.prepaid_plan_name_snapshot,
+                    "prepaid_plan_duration_quantity_snapshot": ticket.prepaid_plan_duration_quantity_snapshot,
+                    "prepaid_plan_duration_unit_snapshot": ticket.prepaid_plan_duration_unit_snapshot,
+                    "prepaid_plan_price_with_tax_snapshot": str(
+                        ticket.prepaid_plan_price_with_tax_snapshot
+                    ),
+                    "cash_day": str(ticket.cash_day.business_date) if ticket.cash_day else None,
+                    "created_by_employee": request.user.username,
+                },
+                reason="Creación de ticket de parqueo prepago",
+            )
+
+            messages.success(
+                request,
+                f"Parqueo prepago {ticket.ticket_number} creado correctamente. Pendiente de pago.",
+            )
+
+            return redirect(
+                "tickets:parking_ticket_detail",
+                ticket_id=ticket.id,
+            )
+
+    else:
+        form = PrepaidParkingTicketForm()
+
+    return render(
+        request,
+        "tickets/create_prepaid_parking_ticket.html",
+        {
+            "form": form,
+            "next_url": next_url,
+        },
+    )
+
+def calculate_prepaid_end_at(start_at, plan):
+    if plan.duration_unit == plan.DAYS:
+        return start_at + relativedelta(days=plan.duration_quantity)
+
+    if plan.duration_unit == plan.WEEKS:
+        return start_at + relativedelta(weeks=plan.duration_quantity)
+
+    if plan.duration_unit == plan.MONTHS:
+        return start_at + relativedelta(months=plan.duration_quantity)
+
+    return start_at

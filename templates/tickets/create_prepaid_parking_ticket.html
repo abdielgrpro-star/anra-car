@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Parqueo prepago | Anracar{% endblock %}
+
+{% block content %}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h1 class="h3 fw-bold mb-1">Crear parqueo prepago</h1>
+                <p class="text-muted mb-0">
+                    Registra un plan de parqueo diario, semanal, quincenal o mensual.
+                    El ticket quedará pendiente de pago.
+                </p>
+            </div>
+
+            <a href="{{ next_url }}" class="btn btn-outline-secondary">
+                ← Volver
+            </a>
+        </div>
+
+        <form method="post" class="card shadow-sm border-0">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ next_url }}">
+
+            <div class="card-header bg-dark text-white">
+                Datos del cliente, vehículo y plan
+            </div>
+
+            <div class="card-body">
+
+                {% if form.non_field_errors %}
+                    <div class="alert alert-danger">
+                        {{ form.non_field_errors }}
+                    </div>
+                {% endif %}
+
+                <div class="row g-3">
+
+                    <div class="col-md-6">
+                        <label class="form-label">
+                            {{ form.customer_name.label }}
+                        </label>
+                        {{ form.customer_name }}
+                        {{ form.customer_name.errors }}
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">
+                            {{ form.customer_phone.label }}
+                        </label>
+                        {{ form.customer_phone }}
+                        {{ form.customer_phone.errors }}
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">
+                            {{ form.vehicle_plate.label }}
+                        </label>
+                        {{ form.vehicle_plate }}
+                        {{ form.vehicle_plate.errors }}
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">
+                            {{ form.prepaid_plan.label }}
+                        </label>
+                        {{ form.prepaid_plan }}
+                        {{ form.prepaid_plan.errors }}
+                        <div class="form-text">
+                            El precio y la duración salen del plan configurado en Catálogo.
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">
+                            {{ form.prepaid_start_at.label }}
+                        </label>
+                        {{ form.prepaid_start_at }}
+                        {{ form.prepaid_start_at.errors }}
+                        <div class="form-text">
+                            Puede ser ahora o una fecha futura.
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="alert alert-info mt-4 mb-0">
+                    Al guardar, el ticket quedará como
+                    <strong>pendiente de pago</strong>.
+                    Luego podrá cobrarse con código o sin código desde el detalle del ticket
+                    o desde la lista de tickets.
+                </div>
+
+            </div>
+
+            <div class="card-footer bg-white d-flex justify-content-end gap-2">
+                <a href="{{ next_url }}" class="btn btn-outline-secondary">
+                    Cancelar
+                </a>
+
+                <button type="submit" class="btn btn-primary">
+                    Crear parqueo prepago
+                </button>
+            </div>
+
+        </form>
+
+    </div>
+</div>
+
+{% endblock %}
